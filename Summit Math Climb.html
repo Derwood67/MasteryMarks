@@ -1,0 +1,439 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Summit Math Climb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: trail-map game — world picker on a topo-map ground, then a climb screen with the question card beside a mountain that fills as you answer */
+:root{
+  --paper:#EAF1EC; --contour:rgba(31,92,69,.09); --card:#FFFFFF; --ink:#16302A; --muted:#566A62;
+  --line:#C6D5CD; --pine:#1F5C45; --pine-soft:#D7E8DF; --flare:#D9601A; --flare-soft:#FBE3D3;
+  --good:#23794B; --good-soft:#DDF1E5; --bad:#B63B26; --bad-soft:#F8DDD7; --rock:#9DB3A8; --snow:#FFFFFF;
+  --display:"Baloo 2","Trebuchet MS",system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",Verdana,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0E1A16; --contour:rgba(111,203,163,.07); --card:#162723; --ink:#E3EEE8; --muted:#94A9A0;
+  --line:#2B423B; --pine:#72C9A2; --pine-soft:#1E3A30; --flare:#F2894A; --flare-soft:#3A2418;
+  --good:#6DD49B; --good-soft:#173528; --bad:#F08A76; --bad-soft:#3B1E18; --rock:#3F5A50; --snow:#DCE9E3; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0E1A16; --contour:rgba(111,203,163,.07); --card:#162723; --ink:#E3EEE8; --muted:#94A9A0;
+  --line:#2B423B; --pine:#72C9A2; --pine-soft:#1E3A30; --flare:#F2894A; --flare-soft:#3A2418;
+  --good:#6DD49B; --good-soft:#173528; --bad:#F08A76; --bad-soft:#3B1E18; --rock:#3F5A50; --snow:#DCE9E3; color-scheme:dark}
+
+html,body{min-height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.5;
+  background-image:repeating-radial-gradient(circle at 15% 8%,transparent 0 26px,var(--contour) 26px 28px),
+  repeating-radial-gradient(circle at 90% 85%,transparent 0 30px,var(--contour) 30px 32px);}
+.wrap{max-width:980px;margin:0 auto;padding-inline:16px;padding-block:20px 48px}
+h1,h2,h3{font-family:var(--display);line-height:1.1;margin:0;text-wrap:balance}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--flare);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px}
+.brand h1{font-size:clamp(2.1rem,6vw,3.2rem);font-weight:800;color:var(--pine);letter-spacing:-.01em}
+.brand p{margin:2px 0 0;color:var(--muted);max-width:44ch}
+.grade{display:flex;background:var(--card);border:2px solid var(--line);border-radius:999px;padding:4px}
+.grade button{border:0;background:transparent;color:var(--muted);padding:8px 18px;border-radius:999px;font-weight:700}
+.grade button[aria-pressed="true"]{background:var(--pine);color:var(--card)}
+
+/* world grid */
+.worlds{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.world{text-align:left;border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:18px;padding:18px;display:grid;grid-template-columns:56px 1fr;gap:4px 14px;align-items:start;transition:transform .15s,border-color .15s}
+.world:hover{transform:translateY(-3px);border-color:var(--pine)}
+.world .elev{grid-row:span 3;width:56px;height:56px;border-radius:14px;background:var(--pine-soft);color:var(--pine);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:1.4rem}
+.world h3{font-size:1.3rem}
+.world .skill{color:var(--muted);font-size:.92rem}
+.world .meta{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:.82rem;color:var(--muted)}
+.stars{color:var(--flare);letter-spacing:2px;font-size:1.05rem}
+.stars .off{color:var(--line)}
+.world.summit{grid-column:1/-1;background:var(--pine);border-color:var(--pine);color:var(--card)}
+.world.summit .elev{background:var(--flare);color:var(--card)}
+.world.summit .skill,.world.summit .meta{color:var(--card);opacity:.85}
+.world.summit .stars .off{color:var(--card);opacity:.35}
+
+.teacher{margin-top:22px;background:var(--card);border:2px dashed var(--line);border-radius:16px;padding:14px 18px}
+.teacher summary{font-weight:700;cursor:pointer;color:var(--pine)}
+.teacher table{border-collapse:collapse;width:100%;font-size:.9rem;margin-top:10px}
+.teacher td,.teacher th{text-align:left;padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}
+.teacher th{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.teacher .tw{overflow-x:auto}
+.teacher p{color:var(--muted);font-size:.9rem;margin:10px 0 0}
+
+/* play */
+.play{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;align-items:start}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.back{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 14px;font-weight:700}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:var(--card);border:2px solid var(--line);border-radius:999px;padding:4px 12px;font-weight:700;font-size:.9rem}
+.chip b{color:var(--flare)}
+.card{background:var(--card);border:2px solid var(--line);border-radius:22px;padding:24px;min-width:0}
+.tag{display:inline-block;font-size:.75rem;letter-spacing:.07em;text-transform:uppercase;font-weight:700;color:var(--pine);background:var(--pine-soft);padding:3px 10px;border-radius:999px}
+.tag.bonus{color:var(--flare);background:var(--flare-soft)}
+.qnum{color:var(--muted);font-size:.85rem;margin-left:8px}
+.prompt{font-size:1.25rem;margin:16px 0 6px}
+.prompt .big{display:block;font-family:var(--display);font-weight:800;font-size:clamp(2rem,7vw,2.8rem);color:var(--ink);line-height:1.15;margin-top:4px}
+.chart{display:inline-flex;flex-wrap:wrap;gap:6px 14px;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:.92rem;margin:6px 0 4px}
+.chart b{color:var(--pine)}
+.answer{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-top:18px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+.field input{font:700 1.5rem var(--body);width:9ch;max-width:100%;padding:8px 12px;border:2px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);font-variant-numeric:tabular-nums}
+.field input:focus{border-color:var(--pine);outline:none}
+.field.r input{width:5ch}
+.unit{font-weight:700;color:var(--muted);padding-bottom:12px}
+.go{border:0;background:var(--flare);color:var(--card);font-weight:800;font-family:var(--display);font-size:1.2rem;padding:10px 22px;border-radius:14px}
+.go:hover{filter:brightness(1.05)}
+.fb{margin-top:16px;border-radius:14px;padding:12px 14px;display:none}
+.fb.show{display:block}
+.fb.good{background:var(--good-soft);color:var(--good)}
+.fb.bad{background:var(--bad-soft);color:var(--bad)}
+.fb.hint{background:var(--flare-soft);color:var(--ink)}
+.fb strong{font-family:var(--display);font-size:1.15rem}
+.fb ol{margin:6px 0 0;padding-left:20px;color:var(--ink)}
+.fb .ans{font-weight:700}
+
+.mtn{background:var(--card);border:2px solid var(--line);border-radius:22px;padding:12px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+.mtn svg{width:100%;height:auto;display:block}
+.mtn .cap{text-align:center;font-size:.85rem;color:var(--muted);margin-top:4px}
+.m-rock{fill:var(--rock)}
+.m-snow{fill:var(--snow)}
+.m-trail{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:4 5}
+.m-ledge{fill:var(--card);stroke:var(--muted);stroke-width:2}
+.m-ledge.hit{fill:var(--good);stroke:var(--good)}
+.m-ledge.miss{fill:var(--flare);stroke:var(--flare)}
+.m-climber{transition:transform .6s cubic-bezier(.3,1.4,.5,1)}
+.m-flagpole{stroke:var(--ink);stroke-width:2}
+.m-flag{fill:var(--flare)}
+.m-body{fill:var(--pine)}
+.m-pack{fill:var(--flare)}
+
+/* results */
+.done{text-align:center;padding:34px 24px}
+.done h2{font-size:clamp(2rem,6vw,2.8rem);color:var(--pine)}
+.done .stars{font-size:2.6rem;letter-spacing:8px;margin:10px 0}
+.done p{color:var(--muted);margin:6px auto;max-width:46ch}
+.done .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+.ghost{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700}
+.review{text-align:left;margin:20px auto 0;max-width:560px;font-size:.92rem}
+.review li{padding:4px 0;border-bottom:1px solid var(--line)}
+.review .x{color:var(--bad);font-weight:700}
+
+@keyframes pop{0%{transform:scale(.9)}60%{transform:scale(1.05)}100%{transform:scale(1)}}
+.pop{animation:pop .35s ease-out}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.shake{animation:shake .3s}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+@media (max-width:720px){
+  .play{grid-template-columns:1fr}
+  .mtn{position:static;order:-1;display:flex;align-items:center;gap:12px;padding:8px 12px}
+  .mtn svg{width:96px;flex:none}
+  .mtn .cap{text-align:left;margin:0}
+  .card{padding:18px}
+}
+</style>
+
+<div class="wrap" id="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Summit Math Climb</h1>
+      <p>Answer to climb. Every correct answer moves your climber up one ledge. Reach the flag in 8 questions.</p>
+    </div>
+    <div class="grade" role="group" aria-label="Grade level">
+      <button id="g4" aria-pressed="true">Grade 4</button>
+      <button id="g5" aria-pressed="false">Grade 5</button>
+    </div>
+  </header>
+  <main id="screen"></main>
+</div>
+
+<script>
+(function(){
+// ---------- helpers ----------
+const r=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const pick=a=>a[r(0,a.length-1)];
+const clean=n=>Number(Number(n).toFixed(6));
+const fmt=n=>clean(n).toLocaleString('en-US',{maximumFractionDigits:4});
+const $=s=>document.querySelector(s);
+const esc=s=>String(s);
+
+// ---------- partial-product / partial-quotient steps ----------
+function placeParts(n){const s=String(n),out=[];for(let i=0;i<s.length;i++){const d=+s[i];if(d)out.push(d*10**(s.length-1-i));}return out;}
+function multSteps(a,b){
+  if(b<10){const p=placeParts(a);return [`Break ${fmt(a)} into ${p.map(fmt).join(' + ')}.`,
+    `Multiply each part by ${b}: ${p.map(x=>`${fmt(x)} × ${b} = ${fmt(x*b)}`).join(', ')}.`,
+    `Add the partial products: ${p.map(x=>fmt(x*b)).join(' + ')} = ${fmt(a*b)}.`];}
+  if(a<100){const pa=placeParts(a),pb=placeParts(b),rows=[];pa.forEach(x=>pb.forEach(y=>rows.push([x,y])));
+    return [`Area model: split ${a} into ${pa.join(' + ')} and ${b} into ${pb.join(' + ')}.`,
+      `Partial products: ${rows.map(([x,y])=>`${x} × ${y} = ${fmt(x*y)}`).join(', ')}.`,
+      `Add them: ${rows.map(([x,y])=>fmt(x*y)).join(' + ')} = ${fmt(a*b)}.`];}
+  const t=Math.floor(b/10)*10,o=b%10,lines=[`Split ${b} into ${t}${o?' + '+o:''}.`,`${fmt(a)} × ${t} = ${fmt(a*t)}`];
+  if(o)lines.push(`${fmt(a)} × ${o} = ${fmt(a*o)}`);
+  lines.push(o?`Add: ${fmt(a*t)} + ${fmt(a*o)} = ${fmt(a*b)}.`:`So ${fmt(a)} × ${b} = ${fmt(a*b)}.`);return lines;
+}
+function divSteps(n,d){
+  let rem=n,qs=[],lines=[];
+  for(const pl of [1000,100,10,1]){const k=Math.floor(rem/(d*pl));if(k>0){const take=k*pl;lines.push(`Take out ${fmt(take)} groups of ${d}: ${fmt(rem)} − ${fmt(take*d)} = ${fmt(rem-take*d)}`);rem-=take*d;qs.push(take);}}
+  lines.push(`Add the groups: ${qs.map(fmt).join(' + ')} = ${fmt(qs.reduce((a,b)=>a+b,0))}, with ${rem} left over.`);
+  return lines;
+}
+
+// ---------- generators ----------
+const G={};
+const unitForm=a=>{const s=String(a),names=['ones','tens','hundreds','thousands'];return s.split('').map((d,i)=>+d?`${d} ${names[s.length-1-i]}`:'').filter(Boolean).join(' ');};
+const RDW='Read–Draw–Write: draw a tape diagram, then write an equation.';
+G.mult=function(gr){
+  if(gr===4){
+    const type=r(0,3);
+    if(type===0){const a=r(102,989),b=r(3,9);return num(`EM² G4 M3 · NC.4.NBT.5`,`Multiply. Use partial products.`,`${fmt(a)} × ${b}`,a*b,multSteps(a,b),`Think in unit form: ${unitForm(a)}. Multiply each unit by ${b}, then add the partial products.`);}
+    if(type===1){const a=r(1012,4989),b=r(2,6);return num(`EM² G4 M3 · 4-digit × 1-digit`,`Multiply. Use partial products or a place value chart.`,`${fmt(a)} × ${b}`,a*b,multSteps(a,b),`Unit form: ${unitForm(a)}. Multiply each unit by ${b} and regroup.`);}
+    if(type===2){const a=r(12,98),b=r(12,98);return num(`EM² G4 M3 · NC.4.NBT.5`,`Multiply. Draw an area model.`,`${a} × ${b}`,a*b,multSteps(a,b),`Split both factors into tens and ones. Find the 4 partial products in your area model and add them.`);}
+    const a=r(112,489),b=r(3,9);const t=pick([
+      [`A school bus drives ${a} miles each week. How many miles does it drive in ${b} weeks?`,'miles'],
+      [`Each box holds ${a} pencils. How many pencils are in ${b} boxes?`,'pencils'],
+      [`A bakery makes ${a} muffins a day. How many muffins does it make in ${b} days?`,'muffins']]);
+    return num(`EM² G4 M3 · word problem`,t[0],'',a*b,multSteps(a,b),`${RDW} (${fmt(a)} × ${b})`,t[1]);
+  }
+  const type=r(0,3);
+  if(type<3){const a=r(104,987),b=r(13,98);return num(`EM² G5 M1 · NC.5.NBT.5`,`Multiply. Use the standard algorithm.`,`${fmt(a)} × ${b}`,a*b,multSteps(a,b),`Find two partial products: ${fmt(a)} × ${Math.floor(b/10)} tens and ${fmt(a)} × ${b%10} ones. Then add.`);}
+  const a=r(120,860),b=r(14,48);const t=pick([
+    [`The stadium has ${b} sections with ${a} seats each. How many seats are there?`,'seats'],
+    [`A farm packs ${a} apples into each crate. How many apples fill ${b} crates?`,'apples'],
+    [`A printer prints ${a} pages an hour. How many pages in ${b} hours?`,'pages']]);
+  return num(`EM² G5 M1 · word problem`,t[0],'',a*b,multSteps(a,b),`${RDW} (${fmt(a)} × ${b})`,t[1]);
+};
+G.div=function(gr){
+  const d=gr===4?r(3,9):r(12,48);
+  const four=gr===4&&r(0,2)===0;
+  let n=gr===4?(four?r(1004,4999):r(104,999)):r(1100,9800);
+  const type=r(0,3);
+  if(type<3){
+    const q=Math.floor(n/d),rm=n%d;
+    const tag=gr===4?(four?'EM² G4 M3 · 4-digit ÷ 1-digit':'EM² G4 M3 · NC.4.NBT.6'):'EM² G5 M1 · NC.5.NBT.6';
+    return {tag,lead:'Divide. Use partial quotients. Find the quotient and the remainder.',big:`${fmt(n)} ÷ ${d}`,kind:'qr',answer:{q,r:rm},
+      steps:divSteps(n,d),hint:gr===4?`Think in unit form: ${unitForm(n)}. Share each unit into ${d} equal groups, starting with the largest unit. Regroup what's left.`:`Partial quotients: how many groups of ${d} can you take out of ${fmt(n)}? Try 100 × ${d} = ${fmt(100*d)} first, then 10 × ${d} = ${10*d}.`};
+  }
+  // remainder in context
+  const q=Math.floor(n/d),rm=n%d;
+  if(rm===0){n+=1;}
+  const q2=Math.floor(n/d),rm2=n%d;
+  const ctx=pick([
+    {s:`${fmt(n)} students are going on a field trip. Each ${gr===4?'van':'bus'} holds ${d} students. How many ${gr===4?'vans':'buses'} are needed so everyone can go?`,a:q2+1,u:gr===4?'vans':'buses',why:`${fmt(n)} ÷ ${d} = ${q2} R ${rm2}. The ${rm2} extra students still need a ride, so add 1 more: ${q2+1}.`},
+    {s:`A factory has ${fmt(n)} crayons. It packs ${d} crayons in each box. How many full boxes can it make?`,a:q2,u:'boxes',why:`${fmt(n)} ÷ ${d} = ${q2} R ${rm2}. The ${rm2} leftover crayons can't fill a box, so the answer is ${q2}.`}
+  ]);
+  return {tag:(gr===4?'EM² G4 M3 · NC.4.OA.3':'EM² G5 M1 · NC.5.NBT.6')+' · remainders',lead:ctx.s,big:'',kind:'num',answer:ctx.a,unit:ctx.u,
+    steps:[...divSteps(n,d),ctx.why],hint:`${RDW} Divide ${fmt(n)} by ${d}, then decide what the remainder means in the story.`};
+};
+G.pow=function(gr){
+  if(gr===4){
+    const type=r(0,2);
+    if(type===0){const p=pick([10,100,1000]),n=p===1000?r(2,99):r(3,999);return num('EM² G4 M3 · NC.4.NBT.1',`Multiply by a power of ten. Picture a place value chart.`,`${fmt(n)} × ${fmt(p)}`,n*p,
+      [`Each time you multiply by 10, every digit moves one place to the left.`,`${fmt(p)} is ${String(p).length-1} tens multiplied together, so the digits move ${String(p).length-1} places.`,`${fmt(n)} × ${fmt(p)} = ${fmt(n*p)}`],`How many zeros are in ${fmt(p)}? Each one shifts the digits one place left.`);}
+    if(type===1){const n=r(12,99),p=pick([10,100,1000]);return num('EM² G4 M3 · NC.4.NBT.1',`Find the missing factor.`,`${fmt(n*p)} = ${n} × ?`,p,
+      [`${fmt(n*p)} has the digits of ${n} moved ${String(p).length-1} places to the left.`,`So the missing number is ${fmt(p)}.`],`Compare ${fmt(n*p)} with ${n}. How many places did the digits move?`);}
+    const d=r(1,9),hi=pick([[1000,10],[1000,100],[100,10],[10000,100],[10000,1000]]);
+    const big=Number(`${d}${'0'.repeat(String(hi[0]).length-1)}`),small=d*hi[1];
+    return num('EM² G4 M1 · NC.4.NBT.1',`In ${fmt(big+small)}, how many times greater is the value of the first ${d} than the value of the second ${d}?`,'',hi[0]/hi[1],
+      [`The first ${d} is worth ${fmt(big)}. The second ${d} is worth ${fmt(small)}.`,`${fmt(small)} × ${fmt(hi[0]/hi[1])} = ${fmt(big)}`,`Each place to the left is 10 times greater.`],`Find what each ${d} is worth. Then count how many places apart they are.`,'times');
+  }
+  const type=r(0,4);
+  if(type===0){const p=pick([10,100,1000]),n=pick([clean(r(12,999)/10),clean(r(102,9999)/100),r(3,99)]);return num('EM² G5 M1 · NC.5.NBT.1',`Multiply. Picture the digits shifting on a place value chart.`,`${fmt(n)} × ${fmt(p)}`,clean(n*p),
+    [`Multiplying by ${fmt(p)} moves every digit ${String(p).length-1} place${p>10?'s':''} to the left.`,`${fmt(n)} × ${fmt(p)} = ${fmt(clean(n*p))}`],`Each zero in ${fmt(p)} moves the digits one place left.`);}
+  if(type===1){const p=pick([0.1,0.01]),n=pick([r(12,950),clean(r(21,999)/10)]);return num('EM² G5 M4 · NC.5.NBT.1',`Multiply.`,`${fmt(n)} × ${p}`,clean(n*p),
+    [`Multiplying by ${p} is the same as dividing by ${p===0.1?10:100}.`,`The digits move ${p===0.1?'one place':'two places'} to the right.`,`${fmt(n)} × ${p} = ${fmt(clean(n*p))}`],`× ${p} makes the number ${p===0.1?'10':'100'} times smaller.`);}
+  if(type===2){const p=pick([10,100]),n=pick([r(120,9800),clean(r(105,999)/10)]);return num('EM² G5 M1/M4 · NC.5.NBT.1',`Divide.`,`${fmt(n)} ÷ ${p}`,clean(n/p),
+    [`Dividing by ${p} moves every digit ${p===10?'one place':'two places'} to the right.`,`${fmt(n)} ÷ ${p} = ${fmt(clean(n/p))}`],`Shift the digits ${p===10?'one place':'two places'} to the right.`);}
+  // bonus exponents
+  const t=r(0,2);
+  if(t===0){const k=r(2,6);return num('EM² G5 M1 · exponents',`The small number is the exponent. It tells how many 10s to multiply. What is the value?`,`10<sup>${k}</sup>`,10**k,
+    [`10<sup>${k}</sup> means ${Array(k).fill('10').join(' × ')}.`,`That is 1 followed by ${k} zeros: ${fmt(10**k)}.`],`Write ${k} tens and multiply them.`,'');}
+  if(t===1){const k=r(2,6);return num('EM² G5 M1 · exponents',`Write ${fmt(10**k)} as a power of ten. What is the exponent?`,`${fmt(10**k)} = 10<sup>?</sup>`,k,
+    [`${fmt(10**k)} = ${Array(k).fill('10').join(' × ')}.`,`That's ${k} tens, so ${fmt(10**k)} = 10<sup>${k}</sup>.`],`Count the zeros in ${fmt(10**k)}.`,'');}
+  const a=r(2,9),k=r(2,4);return num('EM² G5 M1 · exponents',`Find the value.`,`${a} × 10<sup>${k}</sup>`,a*10**k,
+    [`10<sup>${k}</sup> = ${fmt(10**k)}.`,`${a} × ${fmt(10**k)} = ${fmt(a*10**k)}.`],`First find 10<sup>${k}</sup>. Then multiply by ${a}.`,'');
+};
+const C4=[['m','cm',100,'meters','centimeters'],['kg','g',1000,'kilograms','grams'],['L','mL',1000,'liters','milliliters']];
+const C5=[
+  ['ft','in',12,'feet','inches'],['yd','ft',3,'yards','feet'],['mi','ft',5280,'miles','feet'],['lb','oz',16,'pounds','ounces'],
+  ['gal','qt',4,'gallons','quarts'],['qt','pt',2,'quarts','pints'],['pt','c',2,'pints','cups'],['qt','c',4,'quarts','cups'],
+  ['hr','min',60,'hours','minutes'],['min','sec',60,'minutes','seconds'],['day','hr',24,'days','hours'],
+  ['km','m',1000,'kilometers','meters'],['m','cm',100,'meters','centimeters'],['cm','mm',10,'centimeters','millimeters'],
+  ['L','mL',1000,'liters','milliliters'],['kg','g',1000,'kilograms','grams'],['g','mg',1000,'grams','milligrams']];
+G.conv=function(gr){
+  if(gr===4){
+    const [bu,su,f,bn,sn]=pick(C4),type=r(0,2);
+    if(type<2){const n=r(2,f===100?75:45);return num('EM² G4 M1 · NC.4.MD.2',`Use the conversion table. Convert the larger unit to the smaller unit.`,`${n} ${bu} = ? ${su}`,n*f,
+      [`1 ${bn.slice(0,-1)} = ${fmt(f)} ${sn}.`,`So ${n} ${bn} = ${n} × ${fmt(f)} = ${fmt(n*f)} ${sn}.`],`Look for the pattern in the table: each ${bu} adds ${fmt(f)} ${su}. Multiply ${n} × ${fmt(f)}.`,su,false,[1,2,3].map(k=>`${k} ${bu} = ${fmt(k*f)} ${su}`).join(' &nbsp;·&nbsp; '));}
+    const q=pick([
+      ()=>{const a=r(125,480),b=r(3,8);return [`One water bottle holds ${a} mL. How many mL do ${b} bottles hold?`,a*b,'mL',`${a} × ${b} = ${fmt(a*b)} mL`];},
+      ()=>{const a=r(4,9),c=r(120,640);return [`A bag of rice has a mass of ${fmt(c*a)} g. It is split equally into ${a} jars. How many grams go in each jar?`,c,'g',`${fmt(c*a)} ÷ ${a} = ${c} g`];},
+      ()=>{const a=r(150,800),b=r(120,600);return [`A ribbon is ${a} cm long. Mia cuts off ${b<a?b:a-50} cm. How many cm are left?`,a-(b<a?b:a-50),'cm',`${a} − ${b<a?b:a-50} = ${a-(b<a?b:a-50)} cm`];}
+    ])();
+    return num('EM² G4 · NC.4.MD.1 · word problem',q[0],'',q[1],[q[3]],`${RDW} Should you add, subtract, multiply, or divide?`,q[2]);
+  }
+  const [bu,su,f,bn,sn]=pick(C5),type=r(0,3);
+  const chart=`1 ${bu} = ${fmt(f)} ${su}`;
+  if(type===0){const n=f>=1000?pick([r(2,9),clean(r(15,95)/10)]):r(2,f>=60?12:25);return num('EM² G5 M3 · NC.5.MD.1',`Use the conversion chart.`,`${fmt(n)} ${bu} = ? ${su}`,clean(n*f),
+    [`${chart}.`,`Larger to smaller units: multiply. ${fmt(n)} × ${fmt(f)} = ${fmt(clean(n*f))} ${su}.`],`Going to a smaller unit means you'll get more of them. Multiply.`,su,false,chart);}
+  if(type===1){const n=r(2,f>=1000?9:15);return num('EM² G5 M3 · NC.5.MD.1',`Use the conversion chart.`,`${fmt(n*f)} ${su} = ? ${bu}`,n,
+    [`${chart}.`,`Smaller to larger units: divide. ${fmt(n*f)} ÷ ${fmt(f)} = ${n} ${bu}.`],`Going to a larger unit means you'll get fewer of them. Divide.`,bu,false,chart);}
+  if(type===2&&(f===1000||f===100||f===10)){const n=r(f===10?11:f+1,f*9);if(n%f===0)return G.conv(gr);return num('EM² G5 M3 · NC.5.MD.1',`Use the conversion chart. Your answer may be a decimal.`,`${fmt(n)} ${su} = ? ${bu}`,clean(n/f),
+    [`${chart}.`,`Divide by ${fmt(f)}: the digits move ${String(f).length-1} place${f>10?'s':''} right.`,`${fmt(n)} ÷ ${fmt(f)} = ${fmt(clean(n/f))} ${bu}.`],`Dividing by ${fmt(f)} moves the digits to the right.`,bu,false,chart);}
+  const q=pick([
+    ()=>{const lb=r(20,45),sc=pick([4,5,8]);return [`A bag of dog food weighs ${lb} lb. A scoop holds ${sc} oz. How many scoops are in the bag?`,lb*16/sc,'scoops','1 lb = 16 oz',[`${lb} lb × 16 = ${lb*16} oz`,`${lb*16} oz ÷ ${sc} oz = ${fmt(lb*16/sc)} scoops`]];},
+    ()=>{const g=r(2,6);return [`The class has ${g} gallons of lemonade. Each cup holds 1 cup. How many cups can they pour?`,g*16,'cups','1 gal = 4 qt · 1 qt = 4 c',[`${g} gal × 4 = ${g*4} qt`,`${g*4} qt × 4 = ${g*16} cups`]];},
+    ()=>{const h=r(2,5),m=r(5,55);return [`A movie is ${h} hours ${m} minutes long. How many minutes is that?`,h*60+m,'min','1 hr = 60 min',[`${h} hr × 60 = ${h*60} min`,`${h*60} + ${m} = ${h*60+m} min`]];},
+  ])();
+  return num('EM² G5 M3 · NC.5.MD.1 · word problem',q[0],'',q[1],q[4],`${RDW} Convert first, then solve.`,q[2],false,q[3]);
+};
+G.mix=function(gr){return G[pick(['mult','div','pow','conv'])](gr);};
+function num(tag,lead,big,answer,steps,hint,unit,bonus,chart){return {tag,lead,big,kind:'num',answer:clean(answer),steps,hint,unit:unit||'',bonus:!!bonus,chart:chart||''};}
+
+// ---------- worlds ----------
+const WORLDS=[
+  {id:'mult',elev:'×',name:'Multiplication Ridge',skill:{4:'3- and 4-digit × 1-digit, 2-digit × 2-digit',5:'3-digit × 2-digit, standard algorithm'},mod:{4:'Eureka Math² G4 Module 3',5:'Eureka Math² G5 Module 1'}},
+  {id:'div',elev:'÷',name:'Division Falls',skill:{4:'3- and 4-digit ÷ 1-digit, with remainders',5:'4-digit ÷ 2-digit, partial quotients'},mod:{4:'Eureka Math² G4 Module 3',5:'Eureka Math² G5 Module 1'}},
+  {id:'pow',elev:'10ⁿ',name:'Power Peak',skill:{4:'Place value and × 10, 100, 1,000',5:'Powers of ten, exponents, and decimals'},mod:{4:'Eureka Math² G4 Modules 1 & 3',5:'Eureka Math² G5 Modules 1 & 4'}},
+  {id:'conv',elev:'⇄',name:'Conversion Canyon',skill:{4:'Metric conversion tables: m→cm, kg→g, L→mL',5:'Customary, metric, and time conversions'},mod:{4:'Eureka Math² G4 Module 1',5:'Eureka Math² G5 Module 3'}},
+  {id:'mix',elev:'▲',name:'Summit Challenge',skill:{4:'All four skills, mixed',5:'All four skills, mixed'},mod:{4:'Review',5:'Review'},summit:true}];
+const ROUND=8;
+
+// ---------- state ----------
+let S={grade:4,view:'home',world:null,qs:[],i:0,tries:0,score:0,streak:0,results:[]};
+let best={};
+try{best=JSON.parse(localStorage.getItem('smc-best')||'{}')||{};}catch(e){best={};}
+function saveBest(){try{localStorage.setItem('smc-best',JSON.stringify(best));}catch(e){}}
+const starStr=n=>'★'.repeat(n)+`<span class="off">${'★'.repeat(3-n)}</span>`;
+
+function setGrade(g){S.grade=g;$('#g4').setAttribute('aria-pressed',g===4);$('#g5').setAttribute('aria-pressed',g===5);if(S.view==='home')home();}
+$('#g4').onclick=()=>setGrade(4);$('#g5').onclick=()=>setGrade(5);
+
+// ---------- home ----------
+function home(){
+  S.view='home';
+  const g=S.grade;
+  $('#screen').innerHTML=`<div class="worlds">${WORLDS.map(w=>{const b=best[g+w.id]||0;return `
+    <button class="world${w.summit?' summit':''}" data-w="${w.id}">
+      <span class="elev">${w.elev}</span>
+      <h3>${w.name}</h3>
+      <span class="skill">${w.skill[g]}</span>
+      <span class="meta"><span>${w.mod[g]}</span><span class="stars" aria-label="${b} of 3 stars">${starStr(b)}</span></span>
+    </button>`;}).join('')}</div>
+  <details class="teacher"><summary>For teachers: Eureka Math² and NC Standard Course of Study alignment</summary>
+   <div class="tw"><table><thead><tr><th>Trail</th><th>Grade 4</th><th>Grade 5</th></tr></thead><tbody>
+    <tr><td>Multiplication Ridge</td><td><b>EM² Module 3</b> (Area Concepts for Multiplication and Division). NC.4.NBT.5: 3-digit × 1-digit, 2-digit × 2-digit with area models and partial products. 4-digit × 1-digit items are tagged; EM² includes them, NC caps at 3 digits.</td><td><b>EM² Module 1</b> (Place Value Concepts for Multiplication and Division with Whole Numbers). NC.5.NBT.5: 3-digit × 2-digit, standard algorithm.</td></tr>
+    <tr><td>Division Falls</td><td><b>EM² Module 3</b>. NC.4.NBT.6: 3-digit ÷ 1-digit (4-digit items tagged); NC.4.OA.3: interpret remainders.</td><td><b>EM² Module 1</b>. NC.5.NBT.6: 4-digit ÷ 2-digit with remainders, partial quotients.</td></tr>
+    <tr><td>Power Peak</td><td><b>EM² Modules 1 & 3</b>. NC.4.NBT.1: each place is 10 times the place to its right; × 10, 100, 1,000.</td><td><b>EM² Module 1</b> (× and ÷ by 10, 100, 1,000; exponents) and <b>Module 4</b> (decimals × 0.1, 0.01). NC.5.NBT.1.</td></tr>
+    <tr><td>Conversion Canyon</td><td><b>EM² Module 1</b> metric conversion tables. NC.4.MD.1, NC.4.MD.2: larger to smaller unit (m/cm, kg/g, L/mL).</td><td><b>EM² Module 3</b> converting measurements. NC.5.MD.1: one-step conversions with a chart; customary, metric, and time.</td></tr>
+   </tbody></table></div>
+   <p>Hints use Eureka Math² language: unit form, place value chart, area model, partial products, partial quotients, conversion tables, and Read–Draw–Write for word problems. Wrong answers get a hint first, then a worked strategy. Problems are new every climb. Best stars save in this browser only.</p>
+  </details>`;
+  document.querySelectorAll('.world').forEach(b=>b.onclick=()=>start(b.dataset.w));
+}
+
+// ---------- play ----------
+function start(w){
+  S.world=w;S.i=0;S.tries=0;S.score=0;S.streak=0;S.results=[];
+  const seen=new Set();S.qs=[];
+  let guard=0;
+  while(S.qs.length<ROUND&&guard++<200){const q=G[w](S.grade);const k=q.lead+q.big;if(!seen.has(k)){seen.add(k);S.qs.push(q);}}
+  play();
+}
+function mountain(){
+  const pts=[];for(let i=0;i<=ROUND;i++){const t=i/ROUND;pts.push([100+(i%2?28:-28)*(1-t)*(i===ROUND?0:1),290-t*240]);}
+  pts[ROUND]=[100,48];
+  const trail=pts.map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ');
+  const ledges=pts.slice(1).map((p,i)=>{const res=S.results[i];const cls=res==null?'':res?'hit':'miss';return `<circle class="m-ledge ${cls}" cx="${p[0]}" cy="${p[1]}" r="6"/>`;}).join('');
+  const c=pts[S.i];
+  return `<svg viewBox="0 0 200 310" role="img" aria-label="Climber on ledge ${S.i} of ${ROUND}">
+    <path class="m-rock" d="M0 305 L100 30 L200 305 Z"/>
+    <path class="m-snow" d="M100 30 L128 107 L114 98 L100 112 L86 98 L72 107 Z"/>
+    <path class="m-trail" d="${trail}"/>
+    <circle class="m-ledge" cx="${pts[0][0]}" cy="${pts[0][1]}" r="6"/>${ledges}
+    <line class="m-flagpole" x1="100" y1="48" x2="100" y2="14"/><path class="m-flag" d="M100 14 L124 20 L100 27 Z"/>
+    <g class="m-climber" style="transform:translate(${c[0]}px,${c[1]-14}px)"><rect class="m-pack" x="-9" y="-2" width="7" height="11" rx="2"/><circle class="m-body" cx="0" cy="-8" r="5"/><rect class="m-body" x="-4" y="-3" width="8" height="13" rx="3"/></g>
+  </svg><div class="cap num">Ledge ${S.i} of ${ROUND}</div>`;
+}
+function play(){
+  S.view='play';
+  const q=S.qs[S.i],w=WORLDS.find(x=>x.id===S.world);
+  const inputs=q.kind==='qr'
+    ? `<div class="field"><label for="ans">Quotient</label><input id="ans" inputmode="numeric" autocomplete="off"></div>
+       <div class="field r"><label for="rem">Remainder</label><input id="rem" inputmode="numeric" autocomplete="off"></div>`
+    : `<div class="field"><label for="ans">Answer</label><input id="ans" inputmode="decimal" autocomplete="off"></div>${q.unit?`<span class="unit">${q.unit}</span>`:''}`;
+  $('#screen').innerHTML=`
+  <div class="bar"><button class="back" id="back">← Trail map</button>
+    <div class="chips num"><span class="chip">${w.name}</span><span class="chip">Points <b>${S.score}</b></span><span class="chip">Streak <b>${S.streak}</b></span></div></div>
+  <div class="play">
+    <section class="card" id="card">
+      <span class="tag${q.bonus?' bonus':''}">${q.tag}</span><span class="qnum num">Question ${S.i+1} of ${ROUND}</span>
+      <p class="prompt">${q.lead}${q.big?`<span class="big num">${q.big}</span>`:''}</p>
+      ${q.chart?`<div class="chart"><span>Conversion table:</span> <b>${q.chart}</b></div>`:''}
+      <form class="answer" id="form">${inputs}<button class="go" type="submit" id="go">Climb</button></form>
+      <div class="fb" id="fb" aria-live="polite"></div>
+    </section>
+    <aside class="mtn" id="mtn">${mountain()}</aside>
+  </div>`;
+  $('#back').onclick=home;
+  $('#form').onsubmit=e=>{e.preventDefault();check();};
+  setTimeout(()=>{const a=$('#ans');if(a)a.focus({preventScroll:true});},30);
+}
+const parse=v=>{const s=String(v).replace(/[,\s]/g,'');return s===''?NaN:Number(s);};
+function check(){
+  const q=S.qs[S.i],fb=$('#fb');
+  if($('#go').dataset.next){next();return;}
+  let ok;
+  if(q.kind==='qr'){const a=parse($('#ans').value),b=parse($('#rem').value);if(isNaN(a)||isNaN(b)){fb.className='fb show hint';fb.innerHTML='Enter both the quotient and the remainder. Type 0 if nothing is left over.';return;}ok=a===q.answer.q&&b===q.answer.r;}
+  else{const a=parse($('#ans').value);if(isNaN(a)){fb.className='fb show hint';fb.innerHTML='Type a number to climb.';return;}ok=Math.abs(a-q.answer)<1e-6;}
+  const ansText=q.kind==='qr'?`${fmt(q.answer.q)} R ${q.answer.r}`:`${fmt(q.answer)}${q.unit?' '+q.unit:''}`;
+  if(ok){
+    const pts=S.tries===0?10+Math.min(S.streak,5)*2:5;S.score+=pts;
+    S.streak=S.tries===0?S.streak+1:0;S.results[S.i]=S.tries===0;
+    fb.className='fb show good pop';fb.innerHTML=`<strong>${pick(['Nice climb!','Solid footing!','Up you go!','Great work!'])}</strong> +${pts} points. ${ansText} is correct.`;
+    advance();
+  }else if(S.tries===0){
+    S.tries=1;S.streak=0;$('#card').classList.remove('shake');void $('#card').offsetWidth;$('#card').classList.add('shake');
+    fb.className='fb show hint';fb.innerHTML=`<strong>Not yet. Try once more.</strong><br>Hint: ${q.hint}`;
+    $('#ans').select();
+  }else{
+    S.results[S.i]=false;S.streak=0;
+    fb.className='fb show bad';fb.innerHTML=`<strong>The answer is <span class="num">${ansText}</span>.</strong> Here's one way to get it:<ol>${q.steps.map(s=>`<li>${s}</li>`).join('')}</ol>`;
+    advance(true);
+  }
+}
+function advance(missed){
+  S.i++;
+  $('#mtn').innerHTML=mountain();
+  const go=$('#go');go.textContent=S.i>=ROUND?'See results':'Next ledge';go.dataset.next='1';
+  document.querySelectorAll('#form input').forEach(i=>i.readOnly=true);
+  go.focus({preventScroll:true});
+}
+function next(){S.tries=0;if(S.i>=ROUND)results();else play();}
+function results(){
+  S.view='done';
+  const first=S.results.filter(Boolean).length,g=S.grade;
+  const stars=first>=8?3:first>=6?2:first>=4?1:0;
+  const key=g+S.world;if(stars>(best[key]||0)){best[key]=stars;saveBest();}
+  const w=WORLDS.find(x=>x.id===S.world);
+  const missed=S.qs.map((q,i)=>[q,i]).filter(([q,i])=>!S.results[i]);
+  $('#screen').innerHTML=`<section class="card done">
+    <h2>${stars===3?'Summit reached!':stars>0?'You made the climb!':'Good effort, climber!'}</h2>
+    <div class="stars" aria-label="${stars} of 3 stars">${starStr(stars)}</div>
+    <p class="num">${w.name}: ${first} of ${ROUND} correct on the first try · ${S.score} points</p>
+    <p>${stars===3?'Every ledge on the first try. Try the next trail or switch grades.':'Climb again with new problems. 8 first-try answers earn 3 stars.'}</p>
+    ${missed.length?`<ol class="review">${missed.map(([q])=>`<li>${q.big||q.lead} <span class="x">→ ${q.kind==='qr'?fmt(q.answer.q)+' R '+q.answer.r:fmt(q.answer)+(q.unit?' '+q.unit:'')}</span></li>`).join('')}</ol>`:''}
+    <div class="row"><button class="go" id="again">Climb again</button><button class="ghost" id="map">Trail map</button></div>
+  </section>`;
+  $('#again').onclick=()=>start(S.world);$('#map').onclick=home;
+}
+
+// keep progress across live updates
+const boot=d=>{if(d&&d.S){S=d.S;setGrade(S.grade);if(S.view==='play'&&S.qs.length)play();else if(S.view==='done')results();else home();}else home();};
+try{window.claude?.hot?.snapshot(()=>({S}));}catch(e){}
+window.claude?.hot?.ready?window.claude.hot.ready(boot):boot(window.claude?.hot?.data??{});
+})();
+</script>
+
+</body></html>

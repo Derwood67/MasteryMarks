@@ -1,0 +1,1313 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Mastery Marks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@500&family=Kalam:wght@400&display=swap">
+<style>
+/* Layout: teacher's desk — assignment card on the left, the student's paper and the red-pen result on the right; stacks on phones. */
+:root{
+  --paper:#EEF3F2; --surface:#FFFFFF; --sunk:#F6F9F8; --ink:#15222A; --muted:#566A71; --line:#D3DEDC;
+  --pen:#1E48B5; --pen-soft:#E3EAFB; --red:#BF3626; --red-soft:#FBE6E2; --green:#1F7246; --green-soft:#DFF2E7;
+  --amber:#A86A12; --amber-soft:#FBEFD9; --hl:#FFE680;
+  --f-display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-hand:"Kalam", "Comic Neue", "Segoe Print", cursive;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#0F1619; --surface:#172126; --sunk:#131C20; --ink:#E4ECEA; --muted:#93A6AB; --line:#29373C;
+  --pen:#8EAAFF; --pen-soft:#1E2A4A; --red:#FF8B78; --red-soft:#3A1E1A; --green:#6FD49C; --green-soft:#15301F;
+  --amber:#F2B95E; --amber-soft:#35290F; --hl:#5A4B0F; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --paper:#0F1619; --surface:#172126; --sunk:#131C20; --ink:#E4ECEA; --muted:#93A6AB; --line:#29373C;
+  --pen:#8EAAFF; --pen-soft:#1E2A4A; --red:#FF8B78; --red-soft:#3A1E1A; --green:#6FD49C; --green-soft:#15301F;
+  --amber:#F2B95E; --amber-soft:#35290F; --hl:#5A4B0F; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h2{font-size:1.15rem;font-weight:800}
+h3{font-size:.98rem;font-weight:600}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* header */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;padding-block:12px}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+.brand h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em}
+.brand h1 span{color:var(--red)}
+.brand small{color:var(--muted);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase}
+.tabs{display:flex;gap:4px;background:var(--sunk);border:1px solid var(--line);border-radius:999px;padding:3px}
+.tabs button{border:0;background:none;padding:6px 14px;border-radius:999px;cursor:pointer;color:var(--muted);font-weight:700;font-size:.9rem}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+
+main{padding-block:20px 48px}
+.banner{border:1px solid var(--amber);background:var(--amber-soft);color:var(--ink);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:.92rem}
+
+.layout{display:grid;grid-template-columns:minmax(0,370px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:880px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.sticky{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow-y:auto}
+@media (max-width:880px){.sticky{position:static;max-height:none;overflow:visible}}
+.thumbs.mini{grid-template-columns:repeat(auto-fill,minmax(56px,1fr))}
+.thumbs.mini:empty{display:none}
+.keyed{display:flex;flex-direction:column;gap:8px}
+.kitem{border:1px solid var(--line);border-radius:8px;background:var(--sunk);padding:8px;display:flex;flex-direction:column;gap:6px}
+.kitem .khead{display:flex;gap:6px;align-items:center}
+.kitem .khead input{width:56px;font-family:var(--f-display);font-weight:800}
+.kitem .khead .kstd{flex:1;width:auto;font-family:var(--f-mono);font-size:.8rem}
+.kitem textarea{min-height:44px;font-size:.88rem}
+.kitem input{font-size:.88rem}
+.kitem .kans{border-color:var(--green);font-weight:700}
+.kitem .x{border:0;background:none;color:var(--red);font-weight:700;cursor:pointer;font-size:1.1rem;padding:0 4px}
+/* answer sheet view */
+.ak{display:flex;flex-direction:column}
+.akrow{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1.1fr);gap:14px;padding:12px 0;border-top:1px solid var(--line)}
+.akrow:first-child{border-top:0}
+.akrow .n{font-family:var(--f-display);font-weight:800;font-size:1.2rem}
+.akrow .ans{color:var(--green);font-weight:700;font-size:1.05rem}
+.akrow .alt{color:var(--muted);font-size:.86rem}
+.akrow .how{font-size:.9rem;white-space:pre-wrap}
+@media (max-width:640px){.akrow{grid-template-columns:36px minmax(0,1fr)}.akrow>div:last-child{grid-column:2}}
+.stack{display:flex;flex-direction:column;gap:20px;min-width:0}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field>label,.lbl{font-size:.74rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+input[type=text],input[type=search],select,textarea{width:100%;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+textarea{resize:vertical;min-height:70px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row>.field{flex:1 1 140px}
+.hint{font-size:.82rem;color:var(--muted);margin:0}
+
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{border:1px solid var(--line);background:var(--sunk);border-radius:999px;padding:5px 12px;cursor:pointer;font-weight:700;font-size:.88rem}
+.seg input:checked+label{background:var(--pen);border-color:var(--pen);color:var(--surface)}
+.seg input:focus-visible+label{outline:2px solid var(--pen);outline-offset:2px}
+
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--pen)}
+.btn.primary{background:var(--pen);border-color:var(--pen);color:var(--surface)}
+.btn.red{background:var(--red);border-color:var(--red);color:var(--surface)}
+.btn.small{padding:4px 10px;font-size:.84rem}
+.btn.ghost{background:none;border-color:transparent;color:var(--pen)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* standards picker */
+.stds{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.std{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer;font-size:.86rem;line-height:1.35}
+.std:last-child{border-bottom:0}
+.std input{margin-top:3px}
+.std b{font-family:var(--f-mono);font-weight:500;font-size:.8rem;color:var(--pen);display:block}
+.std.sub{padding-left:30px;background:var(--surface);border-left:3px solid var(--pen-soft)}
+.subnote{display:block;font-size:.72rem;color:var(--muted);margin-top:2px}
+.std .strand{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.grp{padding:6px 10px;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--surface);position:sticky;top:0;border-bottom:1px solid var(--line)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--f-mono);font-size:.76rem;border:1px solid var(--line);background:var(--pen-soft);color:var(--pen);border-radius:6px;padding:2px 7px;white-space:nowrap}
+
+/* upload */
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;background:var(--sunk)}
+.drop.over{border-color:var(--pen);background:var(--pen-soft)}
+.drop p{margin:0}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+.thumb{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--sunk);aspect-ratio:3/4;max-width:100%}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb span{position:absolute;left:4px;bottom:4px;background:var(--surface);border-radius:4px;font-size:.72rem;padding:0 5px;font-weight:700}
+.thumb button{position:absolute;right:4px;top:4px;border:0;border-radius:999px;width:24px;height:24px;background:var(--surface);color:var(--red);cursor:pointer;font-weight:700}
+.status{font-size:.9rem;color:var(--muted);display:flex;align-items:center;gap:8px;min-height:1.5em}
+.status.err{color:var(--red)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--pen);animation:pulse 1s infinite alternate}
+@keyframes pulse{to{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+
+/* result */
+.result{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.example-tag{background:var(--hl);color:var(--ink);font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 16px}
+.rhead{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;padding:18px;border-bottom:1px solid var(--line);align-items:center}
+.mark{width:84px;height:84px;border-radius:50%;border:3px solid currentColor;display:grid;place-items:center;transform:rotate(-8deg);font-family:var(--f-display);font-weight:800;line-height:1}
+.mark b{font-size:2.5rem}
+.mark small{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;margin-top:-8px}
+.lv4{color:var(--green)} .lv3{color:var(--pen)} .lv2{color:var(--amber)} .lv1{color:var(--red)}
+.bg4{background:var(--green-soft);color:var(--green)} .bg3{background:var(--pen-soft);color:var(--pen)} .bg2{background:var(--amber-soft);color:var(--amber)} .bg1{background:var(--red-soft);color:var(--red)}
+.rhead h2{font-size:1.3rem}
+.meta{color:var(--muted);font-size:.88rem}
+.rsec{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:12px;min-width:0}
+.rsec:last-child{border-bottom:0}
+.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:.76rem;font-weight:700;white-space:nowrap}
+.stdrow{display:grid;grid-template-columns:110px 112px minmax(0,1fr);gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:.9rem}
+.stdrow:first-of-type{border-top:0}
+.stdrow code{font-family:var(--f-mono);font-size:.8rem;color:var(--pen)}
+.stdrow p{margin:0}
+.stdrow .ns{color:var(--muted);margin-top:4px}
+@media (max-width:560px){.stdrow{grid-template-columns:minmax(0,1fr) auto}.stdrow>div:last-child{grid-column:1/-1}}
+.item{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.item-h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:9px 12px;background:var(--sunk);border-bottom:1px solid var(--line)}
+.item-h .num{font-family:var(--f-display);font-weight:800}
+.item-h .q{flex:1 1 200px;min-width:0;color:var(--muted);font-size:.88rem}
+.item-b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0}
+.item-b>div{padding:10px 12px;min-width:0}
+.item-b>div+div{border-left:1px solid var(--line)}
+@media (max-width:640px){.item-b{grid-template-columns:minmax(0,1fr)}.item-b>div+div{border-left:0;border-top:1px solid var(--line)}}
+.hand{font-family:var(--f-hand);font-size:1.08rem;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.typed{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+.typed del{color:var(--red);text-decoration:line-through;text-decoration-thickness:2px}
+.typed ins{text-decoration:none;background:var(--hl);color:var(--ink);border-radius:3px;padding:0 2px}
+.fixes{list-style:none;margin:0;padding:10px 12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;font-size:.9rem}
+.fixes li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px}
+.fixes .x{font-family:var(--f-hand);color:var(--red);text-decoration:line-through}
+.fixes .y{font-weight:700;color:var(--green)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:640px){.two{grid-template-columns:minmax(0,1fr)}}
+.two ul{margin:6px 0 0;padding-left:18px}
+.fb{font-size:1rem;line-height:1.6;white-space:pre-wrap}
+.flag{color:var(--amber);font-size:.88rem}
+
+/* tables */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--sunk)}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--sunk)}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.acard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:8px}
+.acard .meta{font-size:.84rem}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.88rem;color:var(--red)}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:110px minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:.86rem}
+.bar code{font-family:var(--f-mono);font-size:.78rem;color:var(--pen)}
+.bar .track{height:10px;background:var(--sunk);border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.bar .fill{height:100%;border-radius:999px}
+.f4{background:var(--green)} .f3{background:var(--pen)} .f2{background:var(--amber)} .f1{background:var(--red)}
+.scale{display:flex;flex-wrap:wrap;gap:6px;font-size:.8rem}
+/* class sheet */
+.sumrow{display:flex;flex-wrap:wrap;gap:12px}
+.sum{border:1px solid var(--line);background:var(--sunk);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:4px;min-width:120px}
+.sum.grow{flex:1 1 220px}
+.sum b{font-family:var(--f-display);font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums}
+.sum b small{font-size:.9rem;color:var(--muted);font-weight:600}
+.dist{display:flex;gap:14px;align-items:flex-end;height:84px}
+.dcol{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.8rem;font-variant-numeric:tabular-nums}
+.dbar{width:28px;border-radius:4px 4px 0 0}
+.dcol small{color:var(--muted)}
+.sheet-t th code{font-family:var(--f-mono);font-size:.78rem;text-transform:none;letter-spacing:0;color:var(--pen)}
+.sheet-t td:not(:first-child),.sheet-t th:not(:first-child){text-align:center;white-space:nowrap}
+.sheet-t td:first-child{font-weight:700}
+.sheet-t tfoot td{background:var(--sunk);font-weight:700;border-bottom:0}
+.sheet-t tr.missing{cursor:default}
+.sheet-t tr.missing td{color:var(--muted)}
+.pill.nograde{border:1px dashed var(--line);color:var(--muted)}
+.roster summary{cursor:pointer;font-weight:700}
+</style>
+
+<header class="top"><div class="wrap">
+  <div class="brand"><h1>Mastery<span>Marks</span></h1><small>NC SCOS · Grades 4–5</small></div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="t-grade" aria-selected="true" data-tab="grade">Grade work</button>
+    <button role="tab" id="t-assign" aria-selected="false" data-tab="assign">Assignments</button>
+    <button role="tab" id="t-book" aria-selected="false" data-tab="book">Gradebook</button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <div id="capBanner" class="banner" hidden></div>
+
+  <!-- GRADE -->
+  <section id="tab-grade">
+    <div class="layout">
+      <aside class="panel sticky" aria-label="Assignment">
+        <div class="row" style="justify-content:space-between"><h2>Assignment</h2><button class="btn ghost small" id="newAssign" type="button">Clear</button></div>
+        <div class="field"><label for="savedSel">Saved assignment</label>
+          <select id="savedSel"><option value="">Start a new assignment</option></select></div>
+        <div class="field"><label for="aTitle">Title</label><input type="text" id="aTitle" placeholder="Fractions exit ticket"></div>
+        <div class="row">
+          <div class="field"><span class="lbl">Grade</span>
+            <div class="seg"><input type="radio" name="grade" id="g4" value="4" checked><label for="g4">4th</label><input type="radio" name="grade" id="g5" value="5"><label for="g5">5th</label></div></div>
+        </div>
+        <div class="field"><span class="lbl">Subject</span>
+          <div class="seg" id="subjSeg">
+            <input type="radio" name="subj" id="s-math" value="math" checked><label for="s-math">Math</label>
+            <input type="radio" name="subj" id="s-ela" value="ela"><label for="s-ela">ELA</label>
+            <input type="radio" name="subj" id="s-sci" value="sci"><label for="s-sci">Science</label>
+            <input type="radio" name="subj" id="s-ss" value="ss"><label for="s-ss">Social Studies</label>
+          </div></div>
+        <div class="row">
+          <div class="field"><label for="curr">Curriculum</label><select id="curr"></select></div>
+          <div class="field"><label for="lesson">Lesson</label><input type="text" id="lesson" placeholder="Module 3, Topic B, Lesson 7"></div>
+        </div>
+        <div class="field">
+          <div class="row" style="justify-content:space-between"><span class="lbl">NC standards for this assignment</span>
+            <button class="btn small" id="suggestBtn" type="button">Suggest from lesson</button></div>
+          <div class="chips" id="selChips"></div>
+          <input type="search" id="stdSearch" placeholder="Search codes or words" aria-label="Search standards">
+          <div class="stds" id="stdList"></div>
+          <p class="hint" id="stdHint">Pick the standards this assignment assesses. Leave blank and the grader will choose them from what the work shows.</p>
+        </div>
+        <div class="field">
+          <div class="row" style="justify-content:space-between"><span class="lbl">Answer sheet</span><span class="hint" id="keyCount"></span></div>
+          <p class="hint">Add photos of the blank assignment (or paste the questions in the notes box below), then build the answer sheet. Every paper is graded against it.</p>
+          <div class="row">
+            <span class="btn small filebtn">Add blank pages<input type="file" id="blankIn" accept="image/*,application/pdf" multiple></span>
+            <button class="btn small primary" id="buildKey" type="button">Build answer sheet</button>
+            <button class="btn small ghost" id="addKeyItem" type="button">Add item</button>
+          </div>
+          <div class="thumbs mini" id="blankThumbs"></div>
+          <div class="status" id="keyStatus" role="status"></div>
+          <div class="keyed" id="keyEditor"></div>
+        </div>
+        <div class="field"><label for="akey">Rubric, notes or pasted questions (optional)</label>
+          <textarea id="akey" placeholder="Accept any strategy with a correct model. For #5, a full answer names the theme and gives two details from the text."></textarea></div>
+        <div class="row"><button class="btn" id="saveAssign" type="button">Save assignment</button><span class="hint" id="assignMsg"></span></div>
+      </aside>
+
+      <div class="stack">
+        <div class="panel" aria-label="Student work">
+          <h2>Student work</h2>
+          <div class="row">
+            <div class="field"><label for="sName">Student name</label><input type="text" id="sName" placeholder="Leave blank to read it from the paper"></div>
+            <div class="field"><label for="tSig">Sign feedback as (optional)</label><input type="text" id="tSig" placeholder="Mr. Echols" value="Mr. Echols"></div>
+          </div>
+          <div class="drop" id="drop">
+            <p><b>Scan or photograph each page</b></p>
+            <p class="hint">JPG, PNG or PDF. One clear, flat page per photo reads best.</p>
+            <div class="row" style="justify-content:center">
+              <span class="btn filebtn primary">Upload scans<input type="file" id="fileIn" accept="image/*,application/pdf" multiple></span>
+              <span class="btn filebtn">Take photo<input type="file" id="camIn" accept="image/*" capture="environment"></span>
+            </div>
+          </div>
+          <div class="thumbs" id="thumbs"></div>
+          <label class="row hint" style="gap:6px"><input type="checkbox" id="careful"> Careful reading (slower, better for messy handwriting or long writing)</label>
+          <div class="row"><button class="btn red" id="gradeBtn" type="button">Grade this work</button><button class="btn" id="stopBtn" type="button" hidden>Stop</button></div>
+          <div class="status" id="status" role="status"></div>
+        </div>
+        <div id="resultHost"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ASSIGNMENTS -->
+  <section id="tab-assign" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:14px"><h2>Saved assignments</h2><span class="hint">Each assignment keeps its NC standards, curriculum lesson and answer key so a whole class grades the same way.</span></div>
+    <div class="cards" id="assignCards"></div>
+    <div id="sheetHost" style="margin-top:24px"></div>
+  </section>
+
+  <!-- GRADEBOOK -->
+  <section id="tab-book" hidden>
+    <div class="stack">
+      <div class="row" style="justify-content:space-between"><h2>Gradebook</h2>
+        <div class="row">
+          <input type="search" id="bkSearch" placeholder="Student or assignment" aria-label="Filter gradebook" style="width:200px">
+          <select id="bkSubj" aria-label="Subject filter" style="width:auto"><option value="">All subjects</option><option value="math">Math</option><option value="ela">ELA</option><option value="sci">Science</option><option value="ss">Social Studies</option></select>
+          <button class="btn" id="csvBtn" type="button">Export CSV</button>
+        </div></div>
+      <div class="panel"><h3>Average level by standard</h3><div class="bars" id="bars"></div></div>
+      <div class="tablewrap"><table><thead><tr><th>Date</th><th>Student</th><th>Assignment</th><th>Subject</th><th>Standards</th><th>Level</th></tr></thead><tbody id="bkBody"></tbody></table></div>
+      <div id="bkDetail"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+"use strict";
+/* ---------- NC Standard Course of Study (grades 4–5) ---------- */
+const S = {
+ math:{4:[
+  ["Operations & Algebraic Thinking","NC.4.OA.1","Interpret multiplication as a comparison; solve multiplicative comparison word problems."],
+  ["Operations & Algebraic Thinking","NC.4.OA.3","Solve multistep word problems with whole numbers; interpret remainders; estimate to check reasonableness; write equations with a letter for the unknown."],
+  ["Operations & Algebraic Thinking","NC.4.OA.4","Find factors and multiples; determine whether a number is prime or composite."],
+  ["Operations & Algebraic Thinking","NC.4.OA.5","Generate and analyze number or shape patterns that follow a given rule."],
+  ["Number & Operations in Base Ten","NC.4.NBT.1","Explain that each place is ten times the place to its right (to 100,000)."],
+  ["Number & Operations in Base Ten","NC.4.NBT.2","Read and write whole numbers to 100,000 in standard, word and expanded form."],
+  ["Number & Operations in Base Ten","NC.4.NBT.4","Add and subtract multi-digit whole numbers to 100,000 using the standard algorithm."],
+  ["Number & Operations in Base Ten","NC.4.NBT.5","Multiply up to 3-digit by 1-digit and 2-digit by 2-digit numbers using place value and models."],
+  ["Number & Operations in Base Ten","NC.4.NBT.6","Divide up to 3-digit dividends by 1-digit divisors, with remainders."],
+  ["Number & Operations in Base Ten","NC.4.NBT.7","Compare multi-digit whole numbers to 100,000 using >, =, <."],
+  ["Fractions","NC.4.NF.1","Explain why fractions are equivalent using area and length models."],
+  ["Fractions","NC.4.NF.2","Compare two fractions using models, benchmarks (0, 1/2, 1), common numerators or denominators."],
+  ["Fractions","NC.4.NF.3","Add and subtract fractions and mixed numbers with like denominators; decompose fractions; solve word problems."],
+  ["Fractions","NC.4.NF.4","Multiply a fraction by a whole number; solve related word problems."],
+  ["Fractions","NC.4.NF.6","Relate tenths and hundredths to decimals; add fractions with denominators 10 and 100."],
+  ["Fractions","NC.4.NF.7","Compare decimals to hundredths using models."],
+  ["Measurement & Data","NC.4.MD.1","Measure with metric units; solve one-step metric word problems."],
+  ["Measurement & Data","NC.4.MD.2","Convert metric measurements from larger to smaller units."],
+  ["Measurement & Data","NC.4.MD.3","Find area and perimeter of rectangles and rectilinear figures."],
+  ["Measurement & Data","NC.4.MD.4","Collect data; represent and interpret it in frequency tables, scaled bar graphs and line plots."],
+  ["Measurement & Data","NC.4.MD.6","Understand, measure and sketch angles; find unknown angles by adding and subtracting."],
+  ["Measurement & Data","NC.4.MD.8","Solve word problems adding and subtracting time intervals that cross the hour."],
+  ["Geometry","NC.4.G.1","Draw and identify points, lines, segments, rays, angles, perpendicular and parallel lines."],
+  ["Geometry","NC.4.G.2","Classify triangles and quadrilaterals by angles, sides, parallel or perpendicular sides."],
+  ["Geometry","NC.4.G.3","Recognize and draw lines of symmetry."]],
+ 5:[
+  ["Operations & Algebraic Thinking","NC.5.OA.2","Write, explain and evaluate numerical expressions with parentheses; apply properties of operations."],
+  ["Operations & Algebraic Thinking","NC.5.OA.3","Generate two patterns, form ordered pairs, and graph them on a coordinate plane."],
+  ["Number & Operations in Base Ten","NC.5.NBT.1","Explain place-value relationships; patterns when multiplying or dividing by powers of ten (incl. 0.1, 0.01)."],
+  ["Number & Operations in Base Ten","NC.5.NBT.3","Read, write and compare decimals to thousandths."],
+  ["Number & Operations in Base Ten","NC.5.NBT.5","Fluently multiply up to 3-digit by 2-digit numbers using the standard algorithm."],
+  ["Number & Operations in Base Ten","NC.5.NBT.6","Divide up to 4-digit dividends by 2-digit divisors."],
+  ["Number & Operations in Base Ten","NC.5.NBT.7","Add, subtract, multiply and divide decimals to hundredths/thousandths; check with estimation."],
+  ["Fractions","NC.5.NF.1","Add and subtract fractions and mixed numbers with unlike denominators; estimate with benchmark fractions; solve word problems."],
+  ["Fractions","NC.5.NF.3","Interpret a fraction as division; solve division word problems with fraction or mixed-number answers."],
+  ["Fractions","NC.5.NF.4","Multiply fractions; explain how multiplying by a fraction greater or less than 1 changes size; solve word problems."],
+  ["Fractions","NC.5.NF.7","Divide unit fractions by whole numbers and whole numbers by unit fractions."],
+  ["Measurement & Data","NC.5.MD.1","Convert measurements within one system using a conversion chart."],
+  ["Measurement & Data","NC.5.MD.2","Collect data; make and interpret line graphs."],
+  ["Measurement & Data","NC.5.MD.4","Understand volume; measure with unit cubes."],
+  ["Measurement & Data","NC.5.MD.5","Find volume of rectangular prisms and composite figures using formulas."],
+  ["Geometry","NC.5.G.1","Graph points in the first quadrant of the coordinate plane to solve problems."],
+  ["Geometry","NC.5.G.3","Classify quadrilaterals in a hierarchy based on their properties."]]},
+ ela:{4:[
+  ["Reading: Literature","RL.4.1","Refer to details and examples when explaining what a text says and drawing inferences."],
+  ["Reading: Literature","RL.4.2","Determine a theme from details; summarize the text."],
+  ["Reading: Literature","RL.4.3","Describe a character, setting or event in depth using specific details."],
+  ["Reading: Literature","RL.4.4","Determine the meaning of words and phrases, including those that affect tone."],
+  ["Reading: Literature","RL.4.5","Explain differences between poems, drama and prose using structural elements."],
+  ["Reading: Literature","RL.4.6","Compare and contrast first- and third-person point of view."],
+  ["Reading: Literature","RL.4.7","Connect a text to a visual or oral presentation of it."],
+  ["Reading: Literature","RL.4.9","Compare themes, topics and patterns of events across stories from different cultures."],
+  ["Reading: Informational","RI.4.1","Refer to details and examples when explaining what a text says and drawing inferences."],
+  ["Reading: Informational","RI.4.2","Determine the main idea and explain how key details support it; summarize."],
+  ["Reading: Informational","RI.4.3","Explain events, procedures or concepts in historical, scientific or technical texts — what happened and why."],
+  ["Reading: Informational","RI.4.4","Determine the meaning of academic and domain-specific words."],
+  ["Reading: Informational","RI.4.5","Describe text structure (chronology, comparison, cause/effect, problem/solution)."],
+  ["Reading: Informational","RI.4.6","Compare and contrast firsthand and secondhand accounts."],
+  ["Reading: Informational","RI.4.7","Interpret information presented visually, orally or quantitatively."],
+  ["Reading: Informational","RI.4.8","Explain how an author uses reasons and evidence to support points."],
+  ["Reading: Informational","RI.4.9","Integrate information from two texts on the same topic."],
+  ["Foundational Skills","RF.4.2","Create readable documents with legible cursive handwriting."],
+  ["Foundational Skills","RF.4.4","Use phonics, syllabication and morphology to decode multisyllabic words."],
+  ["Foundational Skills","RF.4.5","Read with accuracy and fluency to support comprehension."],
+  ["Writing","W.4.1","Write opinion pieces supporting a point of view with reasons and information."],
+  ["Writing","W.4.2","Write informative/explanatory texts that convey ideas clearly."],
+  ["Writing","W.4.3","Write narratives with descriptive details and clear event sequences."],
+  ["Writing","W.4.4","With support, use technology to produce and publish writing."],
+  ["Writing","W.4.5","Conduct short research projects on different aspects of a topic."],
+  ["Writing","W.4.6","Gather information from experiences and sources; take notes; list sources."],
+  ["Language","L.4.1","Demonstrate command of grammar and usage (grades 4–5 continuum)."],
+  ["Language","L.4.2","Use correct capitalization, punctuation and spelling."],
+  ["Language","L.4.3","Use knowledge of language: precise words, punctuation for effect, formal vs. informal."],
+  ["Language","L.4.4","Determine meanings of unknown and multiple-meaning words using context, roots and affixes, references."],
+  ["Language","L.4.5","Explain figurative language (similes, metaphors, idioms, adages, proverbs)."],
+  ["Language","L.4.6","Acquire and use grade-appropriate academic and domain-specific words."]],
+ 5:[
+  ["Reading: Literature","RL.5.1","Quote accurately from a text when explaining what it says and drawing inferences."],
+  ["Reading: Literature","RL.5.2","Determine a theme, including how characters respond to challenges; summarize."],
+  ["Reading: Literature","RL.5.3","Compare and contrast two or more characters, settings or events using specific details."],
+  ["Reading: Literature","RL.5.4","Determine the meaning of words and phrases, including figurative language."],
+  ["Reading: Literature","RL.5.5","Explain how chapters, scenes or stanzas fit together to provide structure."],
+  ["Reading: Literature","RL.5.6","Describe how a narrator's or speaker's point of view influences how events are described."],
+  ["Reading: Literature","RL.5.7","Analyze how visual and multimedia elements contribute to meaning, tone or beauty."],
+  ["Reading: Literature","RL.5.9","Compare and contrast stories in the same genre on similar themes and topics."],
+  ["Reading: Informational","RI.5.1","Quote accurately from a text when explaining what it says and drawing inferences."],
+  ["Reading: Informational","RI.5.2","Determine two or more main ideas and explain how key details support them; summarize."],
+  ["Reading: Informational","RI.5.3","Explain relationships between individuals, events, ideas or concepts in a text."],
+  ["Reading: Informational","RI.5.4","Determine the meaning of academic and domain-specific words."],
+  ["Reading: Informational","RI.5.5","Compare and contrast the overall structure of two or more texts."],
+  ["Reading: Informational","RI.5.6","Analyze multiple accounts of the same event, noting similarities and differences in point of view."],
+  ["Reading: Informational","RI.5.7","Draw on multiple print or digital sources to answer a question or solve a problem."],
+  ["Reading: Informational","RI.5.8","Explain how an author uses reasons and evidence to support particular points."],
+  ["Reading: Informational","RI.5.9","Integrate information from several texts on the same topic."],
+  ["Foundational Skills","RF.5.4","Use phonics, syllabication and morphology to decode multisyllabic words."],
+  ["Foundational Skills","RF.5.5","Read with accuracy and fluency to support comprehension."],
+  ["Writing","W.5.1","Write opinion pieces supporting a point of view with logically ordered reasons and information."],
+  ["Writing","W.5.2","Write informative/explanatory texts that convey ideas clearly."],
+  ["Writing","W.5.3","Write narratives using effective technique, descriptive details and clear sequence."],
+  ["Writing","W.5.4","Use technology to produce and publish writing and collaborate."],
+  ["Writing","W.5.5","Conduct short research projects using several sources."],
+  ["Writing","W.5.6","Gather information from experiences and sources; summarize or paraphrase; list sources."],
+  ["Language","L.5.1","Demonstrate command of grammar and usage (grades 4–5 continuum)."],
+  ["Language","L.5.2","Use correct capitalization, punctuation and spelling."],
+  ["Language","L.5.3","Use knowledge of language: expand, combine and reduce sentences for meaning and style."],
+  ["Language","L.5.4","Determine meanings of unknown and multiple-meaning words using context, roots and affixes, references."],
+  ["Language","L.5.5","Interpret figurative language, word relationships and nuances."],
+  ["Language","L.5.6","Acquire and use grade-appropriate academic and domain-specific words."]]},
+ sci:{4:[
+  ["Forces & Interactions","PS.4.1.1","Ask questions to summarize how magnets interact without touching."],
+  ["Forces & Interactions","PS.4.1.2","Investigate how electrically charged objects push or pull other objects."],
+  ["Energy","PS.4.2.1","Identify forms of energy (light, sound, heat, electrical) that cause motion or change."],
+  ["Energy","PS.4.2.2","Use models to explain a simple electrical circuit and its components."],
+  ["Energy","PS.4.2.3","Classify common materials as electrical insulators or conductors."],
+  ["Waves & Light","PS.4.3.1","Infer the path light travels to a mirror and how it reflects at different angles."],
+  ["Waves & Light","PS.4.3.2","Explain how light is refracted and absorbed."],
+  ["Structures & Processes","LS.4.1.1","Explain how external structures of plants and animals support survival."],
+  ["Structures & Processes","LS.4.1.2","Explain how animals take in, process and respond to information through senses."],
+  ["Structures & Processes","LS.4.1.3","Argue from evidence how variation helps some individuals survive in changing habitats."],
+  ["Unity & Diversity","LS.4.2.1","Compare fossils with each other and with living organisms."],
+  ["Unity & Diversity","LS.4.2.2","Explain what fossils suggest about Earth's early environment."],
+  ["Earth's Place in the Universe","ESS.4.1.1","Explain day and night by Earth's rotation."],
+  ["Earth's Place in the Universe","ESS.4.1.2","Explain the repeating pattern of moon phases."],
+  ["Earth's Systems","ESS.4.2.1","Classify minerals by hardness, color, luster, cleavage and streak."],
+  ["Earth's Systems","ESS.4.2.2","Classify rocks as metamorphic, sedimentary or igneous."],
+  ["Earth's Systems","ESS.4.2.3","Explain slow and fast changes to Earth's surface (weathering, erosion, earthquakes, landslides, volcanoes)."],
+  ["Earth & Human Activity","ESS.4.3.1","Infer whether changes in an organism's environment are beneficial or harmful."],
+  ["Earth & Human Activity","ESS.4.3.2","Argue how humans can adapt behavior to changing environments."],
+  ["Earth & Human Activity","ESS.4.3.3","Compare solutions to environmental problems affecting plants and animals."]],
+ 5:[
+  ["Matter & Interactions","PS.5.1.1","Compare the weight of objects before and after an interaction."],
+  ["Matter & Interactions","PS.5.1.2","Explain whether mixing substances results in new substances."],
+  ["Matter & Interactions","PS.5.1.3","Compare how heating and cooling affect materials and their uses."],
+  ["Forces & Interactions","PS.5.2.1","Explain how gravity, friction and mass affect the motion of objects."],
+  ["Forces & Interactions","PS.5.2.2","Use mathematics to infer motion (position, direction, speed)."],
+  ["Structures & Processes","LS.5.1.1","Recognize the organization of humans: cell, tissue, organ, system, organism."],
+  ["Structures & Processes","LS.5.1.2","Compare major human body systems and their functions."],
+  ["Ecosystems","LS.5.2.1","Compare common ecosystems and their ability to support populations."],
+  ["Ecosystems","LS.5.2.2","Classify organisms as producers, consumers or decomposers."],
+  ["Ecosystems","LS.5.2.3","Infer effects of interconnected relationships in an ecosystem."],
+  ["Heredity","LS.5.3.1","Compare instincts and learned behaviors."],
+  ["Heredity","LS.5.3.2","Compare inherited and acquired traits."],
+  ["Earth's Systems","ESS.5.1.1","Compare daily and seasonal weather changes and patterns."],
+  ["Earth's Systems","ESS.5.1.2","Interpret weather data, including severe weather, for a location."],
+  ["Earth's Systems","ESS.5.1.3","Explain the ocean's influence on North Carolina weather and climate."],
+  ["Earth's Systems","ESS.5.1.4","Explain how the sun's energy drives the water cycle."]]},
+ ss:{4:[
+  ["Behavioral Sciences","4.B.1.1","Explain how traditions, social structure and artistic expression shaped North Carolina's identity."],
+  ["Behavioral Sciences","4.B.1.2","Explain how values and beliefs of indigenous, religious and racial groups contributed to NC's development."],
+  ["Civics & Government","4.C&G.1.1","Compare roles and responsibilities of state elected leaders."],
+  ["Civics & Government","4.C&G.1.2","Summarize how women, indigenous, religious and racial groups influence local and state government."],
+  ["Civics & Government","4.C&G.1.3","Differentiate rights and responsibilities in the NC Constitution."],
+  ["Economics","4.E.1.1","Explain how scarcity affects economic decisions in North Carolina."],
+  ["Economics","4.E.1.2","Explain the growth and decline of major NC industries."],
+  ["Economics","4.E.1.3","Explain how resource availability affects factors of production."],
+  ["Economics","4.E.2.1","Explain how spending and saving decisions affect everyday life."],
+  ["Economics","4.E.2.2","Give examples of outcomes of positive and negative financial decisions."],
+  ["Geography","4.G.1.1","Compare the development of NC's geographic regions using geographic tools."],
+  ["Geography","4.G.1.2","Explain how movement of people, goods and ideas affected NC."],
+  ["Geography","4.G.1.3","Summarize reasons for forced and voluntary migration to, from and within NC."],
+  ["History","4.H.1.1","Explain how experiences of minorities, indigenous and marginalized people drove change in NC."],
+  ["History","4.H.1.2","Summarize changing roles of women, indigenous and racial groups in NC over time."],
+  ["History","4.H.1.3","Explain how revolution, reform and resistance shaped North Carolina."],
+  ["History","4.H.1.4","Summarize NC's role in major American conflicts and events."],
+  ["History","4.H.1.5","Compare perspectives on NC events using primary and secondary sources."],
+  ["History","4.H.1.6","Explain the significance of NC's historical symbols from various perspectives."],
+  ["Inquiry","I.1.7","Construct claims in response to compelling and supporting questions."],
+  ["Inquiry","I.1.8","Use information from sources accurately when making claims."],
+  ["Inquiry","I.1.9","Make inferences from information in sources."]],
+ 5:[
+  ["Behavioral Sciences","5.B.1.1","Explain how traditions, social structure and artistic expression created America's identity."],
+  ["Behavioral Sciences","5.B.1.2","Explain how values and beliefs of indigenous, religious and racial groups contributed to American identity."],
+  ["Civics & Government","5.C&G.1.1","Describe the roles of the three branches and how they cooperate."],
+  ["Civics & Government","5.C&G.1.2","Explain how the branches work together to protect freedom, equality and justice."],
+  ["Civics & Government","5.C&G.2.1","Summarize how groups used civic participation and advocacy to secure rights."],
+  ["Civics & Government","5.C&G.2.2","Give examples of rights protected by the U.S. Constitution."],
+  ["Economics","5.E.1.1","Explain factors behind U.S. economic growth and decline."],
+  ["Economics","5.E.1.2","Compare economic decisions by their benefits and consequences."],
+  ["Economics","5.E.1.3","Explain how production, specialization, technology and division of labor drove growth."],
+  ["Economics","5.E.1.4","Summarize the role of trade between the U.S. and other countries."],
+  ["Economics","5.E.2.1","Explain how personal financial decisions affect everyday life."],
+  ["Economics","5.E.2.2","Explain why a basic budget for spending and saving matters."],
+  ["Economics","5.E.2.3","Explain how personal financial decisions affect U.S. economic growth and decline."],
+  ["Geography","5.G.1.1","Explain how location, physical environment and human activity relate in the U.S."],
+  ["Geography","5.G.1.2","Use maps to explain how migration and slavery changed the U.S. landscape."],
+  ["Geography","5.G.1.3","Explain how technological innovation changed U.S. geography."],
+  ["Geography","5.G.1.4","Explain reasons for voluntary and forced migration to, from and within the U.S."],
+  ["History","5.H.1.1","Explain how experiences of women, minorities, indigenous and marginalized people drove change."],
+  ["History","5.H.1.2","Summarize changing roles of women, indigenous people and racial and minority groups."],
+  ["History","5.H.1.3","Explain how revolution, reform and resistance shaped the United States."],
+  ["History","5.H.1.4","Explain how major conflicts and events affected U.S. development."],
+  ["History","5.H.1.5","Compare perspectives on historical events using primary and secondary sources."],
+  ["History","5.H.1.6","Explain the significance of national symbols and traditions from various perspectives."],
+  ["Inquiry","I.1.7","Construct claims in response to compelling and supporting questions."],
+  ["Inquiry","I.1.8","Use information from sources accurately when making claims."],
+  ["Inquiry","I.1.9","Make inferences from information in sources."]]}
+};
+/* Sub-standards (lettered parts) from the current NC math standards */
+const SUBS = {
+ "NC.4.OA.3":[["a","Use estimation to check whether answers are reasonable."],["b","Interpret remainders in word problems."],["c","Represent problems using equations with a letter for the unknown."]],
+ "NC.4.OA.4":[["a","Recognize that a whole number is a multiple of each of its factors."],["b","Determine whether a whole number is a multiple of a given one-digit number."],["c","Determine whether a number is prime or composite."]],
+ "NC.4.NF.2":[["a","Compare fractions by reasoning about their size using area and length models."],["b","Compare fractions using benchmarks 0, 1/2 and 1."],["c","Compare fractions with a common numerator or common denominator."]],
+ "NC.4.NF.3":[["a","Understand adding and subtracting fractions as joining and separating parts of the same whole."],["b","Decompose a fraction into unit fractions or same-denominator sums in more than one way."],["c","Add and subtract fractions and mixed numbers with like denominators."],["d","Solve word problems adding and subtracting fractions and mixed numbers using equations and visual models."]],
+ "NC.4.NF.4":[["a","Represent a whole number times a fraction as a multiple of a unit fraction."],["b","Solve word problems multiplying a fraction by a whole number."]],
+ "NC.4.NF.6":[["a","Show that fractions with denominators 10 and 100 are equivalent."],["b","Add two fractions with denominators 10 and 100 using equivalent fractions."],["c","Represent tenths and hundredths with models and connect them to decimal notation."]],
+ "NC.4.MD.1":[["a","Measure with metric units (cm, m, g, kg, L, mL)."],["b","Solve one-step word problems with whole-number metric length, mass and capacity."]],
+ "NC.4.MD.3":[["a","Find the area of rectilinear figures with known side lengths."],["b","Solve fixed-area/varying-perimeter and fixed-perimeter/varying-area problems."],["c","Apply area and perimeter formulas for rectangles to real-world and math problems."]],
+ "NC.4.MD.4":[["a","Collect numerical data by asking a question."],["b","Represent and interpret data in frequency tables, scaled bar graphs and line plots."],["c","Determine whether a survey question gives categorical or numerical data."]],
+ "NC.4.MD.6":[["a","Understand an angle as two rays with a common endpoint, measured in degrees."],["b","Measure and sketch whole-number angles with a protractor."],["c","Find unknown angles in diagrams using addition and subtraction."]],
+ "NC.5.OA.2":[["a","Use parentheses and the order of operations to write and evaluate expressions."],["b","Apply the commutative, associative and distributive properties."]],
+ "NC.5.OA.3":[["a","Identify relationships between corresponding terms of two patterns."],["b","Form ordered pairs from corresponding terms of two patterns."],["c","Graph the ordered pairs on a coordinate plane."]],
+ "NC.5.NBT.1":[["a","Explain how each place relates to the places beside it."],["b","Explain patterns when multiplying or dividing by powers of ten, including 0.1 and 0.01."]],
+ "NC.5.NBT.3":[["a","Read and write decimals to thousandths in standard, word and expanded form."],["b","Compare decimals to thousandths using >, =, <."]],
+ "NC.5.NBT.7":[["a","Add and subtract decimals to thousandths using models or place-value strategies."],["b","Multiply decimals with products to thousandths using models or strategies."],["c","Divide whole numbers by decimals and decimals by whole numbers (to hundredths) using repeated subtraction or area models."],["d","Use estimation to decide whether answers are reasonable."]],
+ "NC.5.NF.1":[["a","Use benchmark fractions and fraction sense to estimate and check answers."],["b","Solve one- and two-step word problems with area and length models; write equations."]],
+ "NC.5.NF.3":[["a","Interpret a fraction as dividing a quantity into equal shares."],["b","Interpret a fraction as the numerator divided by the denominator."],["c","Solve one-step division word problems with fraction or mixed-number answers."]],
+ "NC.5.NF.4":[["a","Multiply two fractions with denominators 2, 3 or 4 using area and length models."],["b","Explain how multiplying by a fraction greater or less than 1 changes the size of a number."],["c","Solve one-step word problems multiplying fractions, using models."]],
+ "NC.5.MD.2":[["a","Collect data by asking a question whose answers change over time."],["b","Make and interpret line graphs."],["c","Determine whether a survey question gives categorical, numerical or change-over-time data."]],
+ "NC.5.MD.5":[["a","Find the volume of a rectangular prism by packing unit cubes and relate it to multiplying edge lengths."],["b","Build understanding of the volume formulas and apply them to problems."],["c","Find the volume of solids made of two non-overlapping rectangular prisms."]],
+ "NC.5.G.3":[["a","Recognize that properties of a quadrilateral category belong to its subcategories."],["b","Classify quadrilaterals in a hierarchy based on their properties."]]
+};
+const FLAT = {};
+function flat(subj, grade){
+  const k=subj+grade; if (FLAT[k]) return FLAT[k];
+  const out=[];
+  for (const [strand,code,text] of S[subj][grade]){
+    out.push({strand, code, text, parent:null, hasSubs: !!SUBS[code]});
+    for (const [l,t] of (SUBS[code]||[])) out.push({strand, code:`${code}.${l}`, text:t, parent:code, hasSubs:false});
+  }
+  return FLAT[k]=out;
+}
+const TEXT = {}, ORDER = {};
+for (const sj of Object.keys(S)) for (const g of ["4","5"]) flat(sj,g).forEach((r,i)=>{ TEXT[r.code]=r.text; ORDER[r.code]=i; });
+const SUBJ = {math:"Math", ela:"ELA", sci:"Science", ss:"Social Studies"};
+const CURR = {
+  math:["Eureka Math²","Teacher-made"],
+  ela:["HMH Into Reading","Teacher-made"],
+  sci:["HMH Into Science","Teacher-made"],
+  ss:["HMH Into Social Studies","Teacher-made"]
+};
+const LESSON_PH = {
+  math:"Module 3, Topic B, Lesson 7", ela:"Module 4, Week 2, Lesson 3",
+  sci:"Unit 2, Lesson 1", ss:"Unit 3, Lesson 2"
+};
+const LV = {4:"Exceeds",3:"Meets",2:"Approaching",1:"Beginning"};
+const LVDEF = {
+  4:"Exceeds — applies the standard independently and accurately, extends or explains thinking beyond the task.",
+  3:"Meets — demonstrates grade-level mastery; only minor errors that don't show a misunderstanding.",
+  2:"Approaching — partial understanding; key errors or gaps, needs support.",
+  1:"Beginning — little evidence of the standard yet; major misconceptions or work missing."
+};
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clampLv = n => { n = Math.round(Number(n)); return n>=1 && n<=4 ? n : null; };
+const fmtDate = t => new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+const stdText = code => TEXT[code] || "";
+const byOrder = (a,b) => (ORDER[a]??1e9)-(ORDER[b]??1e9) || String(a).localeCompare(String(b));
+
+/* ---------- state ---------- */
+const st = {
+  grade:"4", subj:"math", selected:new Set(), pages:[], assignId:"",
+  sample:null, caps:null, db:null, uid:null, downloads:null,
+  grades:[], assigns:[], current:null, ctl:null, bkOpen:null,
+  roster:[], sheetId:null, sheetOpen:null, sheetView:"grades",
+  blankPages:[], answerSheet:[]
+};
+
+/* ---------- form wiring ---------- */
+function curGrade(){ return document.querySelector('input[name=grade]:checked').value; }
+function curSubj(){ return document.querySelector('input[name=subj]:checked').value; }
+function fillCurr(keep){
+  const sel=$("#curr"), prev=keep ?? sel.value;
+  sel.innerHTML = CURR[st.subj].map(c=>`<option>${esc(c)}</option>`).join("");
+  if (CURR[st.subj].includes(prev)) sel.value = prev;
+  $("#lesson").placeholder = LESSON_PH[st.subj];
+}
+function renderStdList(){
+  const q = $("#stdSearch").value.trim().toLowerCase();
+  const all = flat(st.subj, st.grade);
+  const hit = r => (r.code+" "+r.text+" "+r.strand).toLowerCase().includes(q);
+  const rows = all.filter(r => !q || hit(r) || (r.parent && hit(all.find(p=>p.code===r.parent))) || (!r.parent && all.some(s=>s.parent===r.code && hit(s))));
+  let html="", last="";
+  for (const {strand,code,text,parent,hasSubs} of rows){
+    if (strand!==last){ html+=`<div class="grp">${esc(strand)}</div>`; last=strand; }
+    const id="std-"+code.replace(/[^A-Za-z0-9]/g,"_");
+    html+=`<label class="std${parent?" sub":""}" for="${id}"><input type="checkbox" id="${id}" data-code="${esc(code)}" ${st.selected.has(code)?"checked":""}><span><b>${esc(code)}</b>${esc(text)}${hasSubs?`<span class="subnote">Has sub-standards below</span>`:""}</span></label>`;
+  }
+  $("#stdList").innerHTML = html || `<div class="empty">No standards match “${esc(q)}”.</div>`;
+  renderChips();
+}
+function renderChips(){
+  const c=[...st.selected].sort(byOrder);
+  $("#selChips").innerHTML = c.length ? c.map(x=>`<span class="chip" title="${esc(stdText(x))}">${esc(x)}</span>`).join("") : `<span class="hint">None selected</span>`;
+}
+$("#stdList").addEventListener("change", e=>{
+  const code=e.target.dataset.code; if(!code) return;
+  e.target.checked ? st.selected.add(code) : st.selected.delete(code); renderChips();
+});
+$("#stdSearch").addEventListener("input", renderStdList);
+document.querySelectorAll('input[name=grade]').forEach(r=>r.addEventListener("change",()=>{st.grade=curGrade(); st.selected.clear(); renderStdList();}));
+document.querySelectorAll('input[name=subj]').forEach(r=>r.addEventListener("change",()=>{st.subj=curSubj(); st.selected.clear(); fillCurr(); renderStdList();}));
+
+function setForm(a){
+  st.assignId = a?.id || "";
+  $("#aTitle").value = a?.title || "";
+  const g = a?.grade || "4", s = a?.subject || "math";
+  $("#g"+g).checked = true; $("#s-"+s).checked = true;
+  st.grade=g; st.subj=s; fillCurr(a?.curriculum || CURR[s][0]);
+  $("#lesson").value = a?.lesson || "";
+  $("#akey").value = a?.answerKey || "";
+  st.selected = new Set(a?.standards || []);
+  $("#stdSearch").value=""; renderStdList();
+  $("#savedSel").value = st.assignId;
+  st.answerSheet = (a?.answerSheet || []).map((x,i)=>({...normItem(x,i), standards:(x.standards||[]).slice()}));
+  st.blankPages.forEach(p=>URL.revokeObjectURL(p.url)); st.blankPages=[]; renderBlank(); renderKey(); keyStatus("");
+}
+function formData(){
+  return { title:$("#aTitle").value.trim(), grade:st.grade, subject:st.subj, curriculum:$("#curr").value,
+    lesson:$("#lesson").value.trim(), answerKey:$("#akey").value.trim(), standards:[...st.selected].sort(byOrder),
+    answerSheet: st.answerSheet.filter(it=>it.question.trim()||it.answer.trim()).map(it=>({...it})) };
+}
+$("#newAssign").addEventListener("click", ()=>setForm(null));
+$("#savedSel").addEventListener("change", e=>{ const a=st.assigns.find(x=>x.id===e.target.value); setForm(a||null); });
+
+/* ---------- capabilities ---------- */
+function banner(msg){ const b=$("#capBanner"); b.hidden=!msg; b.textContent=msg||""; }
+async function initCaps(){
+  try{
+    st.sample = await claude.use("sample");
+    if (st.sample) st.caps = await st.sample.limits().catch(()=>null);
+  }catch(_){ st.sample=null; }
+  if (!st.sample) banner("Grading needs Claude, which isn't available in this view. Open this page in claude.ai while signed in to grade work. You can still look around.");
+  else if (!st.caps?.images) banner("This view can't send images to Claude, so scanned work can't be read here. Open the page in claude.ai or the Claude app.");
+  try{
+    const [db,user,dl] = await Promise.all([claude.use("db"), claude.use("user"), claude.use("downloads")]);
+    st.downloads = dl;
+    if (db && user){ const id = await user.id(); if (id){ st.db=db; st.uid=id; subscribe(); } }
+  }catch(_){}
+  renderAssignCards(); renderBook(); fillSavedSel();
+}
+function col(name){ return st.db.collection(`data/users/${st.uid}/app/${name}`); }
+function subscribe(){
+  col("grades").orderBy("createdAt","desc").limit(1000).onSnapshot(snap=>{
+    st.grades = snap.docs.map(d=>({id:d.id, ...d.data()})); renderBook(); renderAssignCards(); renderSheet();
+  }, ()=>{});
+  col("assignments").orderBy("updatedAt","desc").limit(500).onSnapshot(snap=>{
+    st.assigns = snap.docs.map(d=>({id:d.id, ...d.data()})); fillSavedSel(); renderAssignCards(); renderSheet();
+  }, ()=>{});
+  col("meta").doc("roster").onSnapshot(d=>{
+    const n = d.exists ? d.data().names : [];
+    st.roster = Array.isArray(n) ? n.map(String) : [];
+    const ta=document.getElementById("rosterText");
+    if (!ta || document.activeElement!==ta) renderSheet();
+  }, ()=>{});
+}
+
+/* ---------- assignments ---------- */
+function fillSavedSel(){
+  const sel=$("#savedSel"), v=st.assignId;
+  sel.innerHTML = `<option value="">Start a new assignment</option>` + st.assigns.map(a=>`<option value="${esc(a.id)}">${esc(a.title||"Untitled")} · ${a.grade}th ${esc(SUBJ[a.subject]||"")}</option>`).join("");
+  sel.value = st.assigns.some(a=>a.id===v) ? v : "";
+}
+$("#saveAssign").addEventListener("click", async ()=>{
+  const msg=$("#assignMsg");
+  if (!st.db){ msg.textContent="Sign in to claude.ai to save assignments."; return; }
+  const d=formData(); if(!d.title){ msg.textContent="Give the assignment a title first."; $("#aTitle").focus(); return; }
+  d.updatedAt=Date.now();
+  try{
+    if (st.assignId && st.assigns.some(a=>a.id===st.assignId)){ await col("assignments").doc(st.assignId).set(d); }
+    else { const ref = await col("assignments").add(d); st.assignId=ref.id; }
+    msg.textContent="Saved."; setTimeout(()=>msg.textContent="",2500);
+  }catch(e){ msg.textContent="Couldn't save: "+(e?.message||"try again"); }
+});
+function renderAssignCards(){
+  const host=$("#assignCards");
+  if (!st.db){ host.innerHTML=`<div class="empty">Sign in to claude.ai to keep assignments here.</div>`; return; }
+  if (!st.assigns.length){ host.innerHTML=`<div class="empty">No saved assignments yet. Fill in the Assignment card on the Grade work tab, pick its NC standards, and choose “Save assignment”.</div>`; return; }
+  host.innerHTML = st.assigns.map(a=>{
+    const n = st.grades.filter(g=>g.assignId===a.id).length;
+    return `<article class="acard" data-id="${esc(a.id)}">
+      <h3>${esc(a.title||"Untitled")}</h3>
+      <div class="meta">${a.grade}th grade · ${esc(SUBJ[a.subject])} · ${esc(a.curriculum||"")}${a.lesson?" · "+esc(a.lesson):""}</div>
+      <div class="chips">${(a.standards||[]).map(c=>`<span class="chip" title="${esc(stdText(c))}">${esc(c)}</span>`).join("") || `<span class="hint">Standards chosen per paper</span>`}</div>
+      <div class="meta">${n} graded · ${(a.answerSheet||[]).length ? `${a.answerSheet.length}-item answer sheet` : "No answer sheet yet"}</div>
+      <div class="row"><button class="btn small primary" data-act="sheet">Class sheet</button><button class="btn small" data-act="key">Answer sheet</button><button class="btn small" data-act="use">Grade with this</button><button class="btn small" data-act="del">Delete</button></div>
+      <div class="confirm" hidden>Delete this assignment? Graded papers stay in the gradebook. <button class="btn small red" data-act="yes">Delete</button><button class="btn small" data-act="no">Keep</button></div>
+    </article>`;}).join("");
+}
+$("#assignCards").addEventListener("click", async e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  const card=b.closest(".acard"), id=card.dataset.id, a=st.assigns.find(x=>x.id===id);
+  const conf=card.querySelector(".confirm");
+  if (b.dataset.act==="use"){ setForm(a); showTab("grade"); }
+  if (b.dataset.act==="sheet"){ st.sheetId=id; st.sheetView="grades"; st.sheetOpen=null; renderSheet(); $("#sheetHost").scrollIntoView({block:"start"}); }
+  if (b.dataset.act==="key"){ st.sheetId=id; st.sheetView="key"; renderSheet(); $("#sheetHost").scrollIntoView({block:"start"}); }
+  if (b.dataset.act==="del") conf.hidden=false;
+  if (b.dataset.act==="no") conf.hidden=true;
+  if (b.dataset.act==="yes"){ try{ await col("assignments").doc(id).delete(); if(st.assignId===id) st.assignId=""; if(st.sheetId===id){ st.sheetId=null; $("#sheetHost").innerHTML=""; } }catch(_){} }
+});
+
+/* ---------- class grade sheet ---------- */
+const norm = s => String(s||"").trim().toLowerCase().replace(/\s+/g," ");
+function sheetPapers(a){
+  const t=norm(a.title);
+  return st.grades.filter(g => g.assignId===a.id || (!g.assignId && norm(g.title)===t && g.grade===a.grade && g.subject===a.subject));
+}
+function sheetRows(a){
+  const by=new Map();
+  for (const g of sheetPapers(a)){ // grades are newest first
+    const k=norm(g.student);
+    if (!by.has(k)) by.set(k,{name:g.student, paper:g, tries:1}); else by.get(k).tries++;
+  }
+  for (const n of st.roster){ const k=norm(n); if (k && !by.has(k)) by.set(k,{name:n, paper:null, tries:0}); }
+  return [...by.values()].sort((x,y)=>x.name.localeCompare(y.name, undefined, {sensitivity:"base"}));
+}
+function sheetCols(a){
+  const scored=new Set();
+  sheetPapers(a).forEach(g=>(g.result?.standards||[]).forEach(s=>scored.add(s.code)));
+  const set=new Set(scored);
+  for (const c of (a.standards||[])){
+    const subsScored = [...scored].some(x=>x.startsWith(c+"."));
+    if (!subsScored) set.add(c);   // keep the parent column only when no sub-standard was scored
+  }
+  return [...set].sort(byOrder);
+}
+const lvOf = (g, code) => {
+  const ss=g?.result?.standards||[], direct=clampLv(ss.find(s=>s.code===code)?.level);
+  if (direct) return direct;
+  const subs=ss.filter(s=>String(s.code).startsWith(code+".")).map(s=>clampLv(s.level)).filter(Boolean);
+  return subs.length ? clampLv(subs.reduce((x,y)=>x+y,0)/subs.length) : null;
+};
+function renderSheet(){
+  const host=$("#sheetHost"), a=st.assigns.find(x=>x.id===st.sheetId);
+  if (!a){ host.innerHTML=""; return; }
+  if (st.sheetView==="key") return renderAnswerView(host, a);
+  const rows=sheetRows(a), cols=sheetCols(a), graded=rows.filter(r=>r.paper);
+  const avg = arr => arr.length ? (arr.reduce((x,y)=>x+y,0)/arr.length) : null;
+  const overallAvg = avg(graded.map(r=>clampLv(r.paper.level)).filter(Boolean));
+  const dist=[4,3,2,1].map(n=>({n, c:graded.filter(r=>clampLv(r.paper.level)===n).length}));
+  const colAvg = cols.map(c=>avg(graded.map(r=>lvOf(r.paper,c)).filter(Boolean)));
+  const cell = l => l ? `<span class="pill bg${l}">${l}</span>` : `<span class="hint">—</span>`;
+  const avgCell = v => v==null ? `<span class="hint">—</span>` : `<b>${v.toFixed(1)}</b>`;
+  host.innerHTML = `<div class="panel sheet">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div style="min-width:0;display:flex;flex-direction:column;gap:4px">
+        <span class="lbl">Class grade sheet</span>
+        <h2>${esc(a.title||"Untitled")}</h2>
+        <div class="meta">${a.grade}th grade · ${esc(SUBJ[a.subject])} · ${esc(a.curriculum||"")}${a.lesson?" · "+esc(a.lesson):""}</div>
+      </div>
+      <div class="row"><button class="btn small" type="button" id="shGrade">Grade a paper</button><button class="btn small" type="button" id="shCsv">Export sheet</button><button class="btn small ghost" type="button" id="shClose">Close</button></div>
+    </div>
+    <div class="sumrow">
+      <div class="sum"><span class="lbl">Graded</span><b>${graded.length}${st.roster.length?` <small>of ${rows.length}</small>`:""}</b></div>
+      <div class="sum"><span class="lbl">Class average</span><b>${overallAvg==null?"—":overallAvg.toFixed(1)}</b></div>
+      <div class="sum grow"><span class="lbl">Overall levels</span>
+        <div class="dist">${dist.map(d=>`<div class="dcol"><div class="dbar f${d.n}" style="height:${graded.length?Math.max(4,d.c/graded.length*56):4}px"></div><span>${d.c}</span><small>${d.n}</small></div>`).join("")}</div></div>
+    </div>
+    <div class="tablewrap"><table class="sheet-t">
+      <thead><tr><th>Student</th>${cols.map(c=>`<th title="${esc(stdText(c))}"><code>${esc(c)}</code></th>`).join("")}<th>Overall</th><th>Date</th></tr></thead>
+      <tbody>${rows.length ? rows.map(r=>`<tr ${r.paper?`data-id="${esc(r.paper.id)}" tabindex="0"`:`class="missing"`}>
+        <td>${esc(r.name)}${r.tries>1?` <span class="hint">(${r.tries} papers, newest shown)</span>`:""}</td>
+        ${cols.map(c=>`<td>${r.paper?cell(lvOf(r.paper,c)):""}</td>`).join("")}
+        <td>${r.paper?(()=>{const l=clampLv(r.paper.level)||2; return `<span class="pill bg${l}">${l} · ${LV[l]}</span>`;})():`<span class="pill nograde">Not graded</span>`}</td>
+        <td>${r.paper?fmtDate(r.paper.createdAt):""}</td></tr>`).join("")
+        : `<tr><td colspan="${cols.length+3}" class="empty">No papers yet. Choose “Grade a paper”, or add your roster below to see who still needs grading.</td></tr>`}</tbody>
+      ${graded.length?`<tfoot><tr><td>Class average</td>${colAvg.map(avgCell).join("")}<td>${avgCell(overallAvg)}</td><td></td></tr></tfoot>`:""}
+    </table></div>
+    <details class="roster" ${st.roster.length?"":"open"}><summary>Class roster (${st.roster.length})</summary>
+      <div class="field" style="margin-top:8px"><label for="rosterText">One student per line. Used on every assignment's sheet.</label>
+        <textarea id="rosterText" rows="6">${esc(st.roster.join("\n"))}</textarea></div>
+      <div class="row" style="margin-top:8px"><button class="btn small primary" type="button" id="rosterSave">Save roster</button><span class="hint" id="rosterMsg"></span></div>
+    </details>
+    <div id="sheetDetail"></div>
+  </div>`;
+  const q=s=>host.querySelector(s);
+  q("#shClose").addEventListener("click", ()=>{ st.sheetId=null; host.innerHTML=""; });
+  q("#shGrade").addEventListener("click", ()=>{ setForm(a); showTab("grade"); $("#sName").focus(); });
+  q("#shCsv").addEventListener("click", ()=>exportSheet(a, rows, cols));
+  q("#rosterSave").addEventListener("click", async ()=>{
+    const names=[...new Set(q("#rosterText").value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];
+    try{ await col("meta").doc("roster").set({names, updatedAt:Date.now()}); q("#rosterMsg").textContent="Saved."; }
+    catch(e){ q("#rosterMsg").textContent="Couldn't save: "+(e?.message||"try again"); }
+  });
+  const open = id => { const g=st.grades.find(x=>x.id===id); if(!g) return; st.sheetOpen=id; renderResult(q("#sheetDetail"), {...g}, {mode:"saved"}); q("#sheetDetail").scrollIntoView({block:"start"}); };
+  q("tbody").addEventListener("click", e=>{ const tr=e.target.closest("tr[data-id]"); if(tr) open(tr.dataset.id); });
+  q("tbody").addEventListener("keydown", e=>{ if(e.key==="Enter"){ const tr=e.target.closest("tr[data-id]"); if(tr) open(tr.dataset.id); }});
+  if (st.sheetOpen && st.grades.some(g=>g.id===st.sheetOpen)) renderResult(q("#sheetDetail"), {...st.grades.find(g=>g.id===st.sheetOpen)}, {mode:"saved"});
+}
+function renderAnswerView(host, a){
+  const items=a.answerSheet||[];
+  host.innerHTML = `<div class="panel">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div style="min-width:0;display:flex;flex-direction:column;gap:4px">
+        <span class="lbl">Answer sheet</span>
+        <h2>${esc(a.title||"Untitled")}</h2>
+        <div class="meta">${a.grade}th grade · ${esc(SUBJ[a.subject])} · ${esc(a.curriculum||"")}${a.lesson?" · "+esc(a.lesson):""}</div>
+        <div class="chips">${(a.standards||[]).map(c=>`<span class="chip" title="${esc(stdText(c))}">${esc(c)}</span>`).join("")}</div>
+      </div>
+      <div class="row"><button class="btn small" type="button" id="akEdit">${items.length?"Edit":"Build answer sheet"}</button>${items.length?`<button class="btn small" type="button" id="akDl">Download</button>`:""}<button class="btn small ghost" type="button" id="akClose">Close</button></div>
+    </div>
+    ${items.length ? `<div class="ak">${items.map(it=>`<div class="akrow">
+      <div class="n">${esc(it.n)}</div>
+      <div><div>${esc(it.question)}</div><div class="chips" style="margin-top:6px">${(it.standards||[]).map(c=>`<span class="chip" title="${esc(stdText(c))}">${esc(c)}</span>`).join("")}</div></div>
+      <div><div class="ans">${esc(it.answer)}</div>${it.accept?`<div class="alt">Also accept: ${esc(it.accept)}</div>`:""}${it.explanation?`<div class="how">${esc(it.explanation)}</div>`:""}</div>
+    </div>`).join("")}</div>`
+    : `<div class="empty">This assignment doesn't have an answer sheet yet. Choose “Build answer sheet”, add photos of the blank assignment, and the grader will solve it for you to check.</div>`}
+    ${a.answerKey?`<div><span class="lbl">Rubric and notes</span><div class="how" style="white-space:pre-wrap">${esc(a.answerKey)}</div></div>`:""}
+  </div>`;
+  host.querySelector("#akClose").addEventListener("click", ()=>{ st.sheetId=null; host.innerHTML=""; });
+  host.querySelector("#akEdit").addEventListener("click", ()=>{ setForm(a); showTab("grade"); $("#keyEditor").scrollIntoView({block:"center"}); });
+  host.querySelector("#akDl")?.addEventListener("click", ()=>downloadKey(a));
+}
+async function downloadKey(a){
+  const btn=$("#akDl");
+  if (!st.downloads){ btn.textContent="Downloads unavailable here"; setTimeout(()=>btn.textContent="Download",2500); return; }
+  const e=esc, rows=(a.answerSheet||[]).map(it=>`<tr><td class="n">${e(it.n)}</td><td>${e(it.question)}<div class="s">${e((it.standards||[]).join(", "))}</div></td><td><b>${e(it.answer)}</b>${it.accept?`<div class="m">Also accept: ${e(it.accept)}</div>`:""}${it.explanation?`<div class="m">${e(it.explanation).replace(/\n/g,"<br>")}</div>`:""}</td></tr>`).join("");
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${e(a.title)} – Answer Sheet</title><style>
+body{font:14px/1.45 Arial,Helvetica,sans-serif;color:#15222A;margin:32px}h1{font-size:22px;margin:0 0 4px}.meta{color:#566A71;margin-bottom:16px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #C9D4D2;padding:8px;vertical-align:top;text-align:left}th{background:#EEF3F2;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.n{width:40px;font-weight:bold;font-size:16px}b{color:#1F7246}.m{color:#444;margin-top:4px}.s{font-family:monospace;color:#1E48B5;font-size:12px;margin-top:4px}
+@media print{body{margin:12mm}}</style></head><body>
+<h1>${e(a.title)} – Answer Sheet</h1><div class="meta">${e(a.grade)}th grade · ${e(SUBJ[a.subject])} · ${e(a.curriculum||"")}${a.lesson?" · "+e(a.lesson):""}<br>NC standards: ${e((a.standards||[]).join(", "))}${teacherSig()?"<br>"+e(teacherSig()):""}</div>
+<table><thead><tr><th>#</th><th>Question</th><th>Answer</th></tr></thead><tbody>${rows}</tbody></table>
+${a.answerKey?`<p><b style="color:#15222A">Rubric and notes:</b><br>${e(a.answerKey).replace(/\n/g,"<br>")}</p>`:""}</body></html>`;
+  const safe=(a.title||"assignment").replace(/[^A-Za-z0-9 _-]/g,"").trim().replace(/\s+/g,"-").slice(0,60)||"assignment";
+  try{ await st.downloads.save({filename:`${safe}-answer-sheet.html`, data:html}); }catch(_){}
+}
+async function exportSheet(a, rows, cols){
+  const btn=$("#shCsv");
+  if (!st.downloads){ btn.textContent="Downloads unavailable here"; setTimeout(()=>btn.textContent="Export sheet",2500); return; }
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const lines=[["Student",...cols,"Overall level","Overall label","Date","Student feedback"].map(q).join(",")];
+  rows.forEach(r=>{ const g=r.paper, l=clampLv(g?.level);
+    lines.push([r.name, ...cols.map(c=>g?lvOf(g,c)??"":""), g?l:"Not graded", g?LV[l]:"", g?fmtDate(g.createdAt):"", g?.feedback||""].map(q).join(",")); });
+  const safe=(a.title||"assignment").replace(/[^A-Za-z0-9 _-]/g,"").trim().replace(/\s+/g,"-").slice(0,60)||"assignment";
+  try{ await st.downloads.save({filename:`${safe}-class-sheet.csv`, data:lines.join("\r\n")}); }catch(_){}
+}
+
+/* ---------- suggest standards ---------- */
+$("#suggestBtn").addEventListener("click", async ()=>{
+  const btn=$("#suggestBtn"), d=formData();
+  if (!st.sample){ setStatus("Suggestions need Claude, which isn't available in this view.", true); return; }
+  if (!d.lesson && !d.title && !d.answerKey){ setStatus("Add a lesson, title or answer key so there's something to match standards to.", true); return; }
+  const list = flat(d.subject, d.grade).map(r=>`${r.parent?"  ":""}${r.code}: ${r.text}`).join("\n");
+  btn.disabled=true; btn.textContent="Matching…";
+  try{
+    const codes = await st.sample.json(
+`You align classroom assignments to the North Carolina Standard Course of Study.
+Grade ${d.grade}, ${SUBJ[d.subject]}. Curriculum: ${d.curriculum}. Lesson: ${d.lesson||"(not given)"}. Assignment title: ${d.title||"(not given)"}.
+Answer key / rubric: ${d.answerKey||"(none)"}
+
+Pick the 1 to 4 standards from this list that the assignment most directly assesses. Indented lines are sub-standards of the line above: when a standard has sub-standards, choose the specific sub-standard codes the assignment targets instead of the parent. Use what you know about the curriculum's scope and sequence for that lesson, and the content of the title and key.
+${list}
+
+Reply with only a JSON array of the chosen codes exactly as written, e.g. ["${flat(d.subject,d.grade)[0].code}"].`, {modelTier:"quick"});
+    const valid = new Set(flat(d.subject, d.grade).map(r=>r.code));
+    const got = (Array.isArray(codes)?codes:[]).map(String).filter(c=>valid.has(c));
+    if (got.length){ got.forEach(c=>st.selected.add(c)); renderStdList(); setStatus(`Added ${got.join(", ")}. Check them against your pacing guide.`); }
+    else setStatus("No confident match. Pick standards from the list.", true);
+  }catch(e){ setStatus(errCopy(e), true); }
+  finally{ btn.disabled=false; btn.textContent="Suggest from lesson"; }
+});
+
+/* ---------- answer sheet (teacher key) ---------- */
+function keyStatus(msg, err, busy){
+  const s=$("#keyStatus"); s.className="status"+(err?" err":"");
+  s.innerHTML=(busy?'<span class="dot"></span>':"")+esc(msg||"");
+}
+function cleanCodes(v){
+  const valid=new Set(flat(st.subj, st.grade).map(r=>r.code));
+  const list = Array.isArray(v) ? v : String(v||"").split(/[,\s]+/);
+  return [...new Set(list.map(s=>String(s).trim()).filter(c=>valid.has(c)))].sort(byOrder);
+}
+function normItem(it, i){
+  return { n:String(it.n ?? it.number ?? i+1).slice(0,12), question:String(it.question||""), answer:String(it.answer||""),
+    accept:String(it.accept||""), explanation:String(it.explanation||""), standards:cleanCodes(it.standards) };
+}
+function renderKey(){
+  const host=$("#keyEditor"), items=st.answerSheet;
+  $("#keyCount").textContent = items.length ? `${items.length} item${items.length>1?"s":""}` : "";
+  host.innerHTML = items.map((it,i)=>`<div class="kitem" data-i="${i}">
+    <div class="khead"><input type="text" id="k${i}-n" data-f="n" value="${esc(it.n)}" aria-label="Item number">
+      <input type="text" class="kstd" id="k${i}-s" data-f="standards" value="${esc(it.standards.join(", "))}" placeholder="Standards, e.g. ${esc(flat(st.subj,st.grade)[0].code)}" aria-label="Standards for item ${esc(it.n)}">
+      <button type="button" class="x" data-del="${i}" aria-label="Remove item ${esc(it.n)}">×</button></div>
+    <textarea id="k${i}-q" data-f="question" rows="2" placeholder="Question" aria-label="Question">${esc(it.question)}</textarea>
+    <input type="text" class="kans" id="k${i}-a" data-f="answer" value="${esc(it.answer)}" placeholder="Correct answer" aria-label="Correct answer">
+    <input type="text" id="k${i}-o" data-f="accept" value="${esc(it.accept)}" placeholder="Also accept (other correct forms)" aria-label="Also accept">
+    <textarea id="k${i}-e" data-f="explanation" rows="2" placeholder="How to solve, or what a full answer includes" aria-label="Explanation">${esc(it.explanation)}</textarea>
+  </div>`).join("");
+}
+$("#keyEditor").addEventListener("input", e=>{
+  const f=e.target.dataset.f, box=e.target.closest(".kitem"); if(!f||!box) return;
+  const it=st.answerSheet[+box.dataset.i];
+  if (f==="standards") return; // parsed on change
+  it[f]=e.target.value;
+});
+$("#keyEditor").addEventListener("change", e=>{
+  if (e.target.dataset.f!=="standards") return;
+  const it=st.answerSheet[+e.target.closest(".kitem").dataset.i];
+  it.standards=cleanCodes(e.target.value); e.target.value=it.standards.join(", ");
+});
+$("#keyEditor").addEventListener("click", e=>{
+  const b=e.target.closest("[data-del]"); if(!b) return;
+  st.answerSheet.splice(+b.dataset.del,1); renderKey();
+});
+$("#addKeyItem").addEventListener("click", ()=>{
+  st.answerSheet.push(normItem({n:String(st.answerSheet.length+1)}, st.answerSheet.length)); renderKey();
+  document.getElementById(`k${st.answerSheet.length-1}-q`)?.focus();
+});
+function renderBlank(){
+  $("#blankThumbs").innerHTML = st.blankPages.map((p,i)=>`<div class="thumb"><img src="${p.url}" alt="Blank page ${i+1}"><button type="button" data-i="${i}" aria-label="Remove blank page ${i+1}">×</button></div>`).join("");
+}
+$("#blankThumbs").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; const [p]=st.blankPages.splice(+b.dataset.i,1); URL.revokeObjectURL(p.url); renderBlank(); });
+$("#blankIn").addEventListener("change", async e=>{ const f=[...e.target.files]; e.target.value=""; st.blankPages.push(...await readFiles(f, keyStatus)); renderBlank(); });
+
+$("#buildKey").addEventListener("click", async ()=>{
+  const d=formData(), btn=$("#buildKey");
+  if (!st.sample){ keyStatus("Building an answer sheet needs Claude, which isn't available in this view.", true); return; }
+  if (!st.blankPages.length && !d.answerKey){ keyStatus("Add photos of the blank assignment, or paste the questions in the notes box.", true); return; }
+  if (st.blankPages.length && !st.caps?.images){ keyStatus("This view can't send images. Paste the questions in the notes box instead.", true); return; }
+  const list = flat(d.subject, d.grade).map(r=>`${r.parent?"  ":""}${r.code}: ${r.text}`).join("\n");
+  const prompt = `You are an experienced North Carolina grade ${d.grade} ${SUBJ[d.subject]} teacher building the answer sheet (teacher answer key) for an assignment.
+Assignment: ${d.title||"(untitled)"} · Curriculum: ${d.curriculum}${d.lesson?" · "+d.lesson:""}
+${st.blankPages.length?`${st.blankPages.length} page image(s) of the assignment are attached, in order.`:"No images. The questions are in the teacher's notes below."}
+Teacher's notes / pasted questions: ${d.answerKey||"(none)"}
+${d.standards.length?`Standards the teacher assigned: ${d.standards.join(", ")}. Prefer these when tagging items.`:""}
+
+NC standards for this grade and subject (indented lines are sub-standards; tag with the most specific code that fits):
+${list}
+
+For every question or task, in order:
+- n: the number or label as printed (e.g. "1", "2a", "Part B").
+- question: the question restated briefly, including all numbers and key words a grader needs.
+- answer: the correct final answer, short and exact. Solve it yourself and double-check the math or facts. If the page already shows answers (a teacher edition), verify them.
+- accept: other forms that are also correct (equivalent fractions, mixed vs. improper, units written differently, reasonable wording), or "".
+- explanation: for problems, the solution steps in 1–3 short lines a ${d.grade}th grader could follow (Eureka Math² style models are fine to name). For open responses, what a full answer must include plus a brief exemplar answer.
+- standards: 1–2 codes from the list.
+If something on the page can't be read, say so in notes instead of guessing.
+
+Reply with only JSON: {"items":[{"n":"1","question":"","answer":"","accept":"","explanation":"","standards":["code"]}],"notes":""}`;
+  btn.disabled=true; keyStatus(`Solving the assignment and building the answer sheet… this can take a minute.`, false, true);
+  try{
+    const opts = { modelTier:"complex", cache:false };
+    if (st.blankPages.length) opts.images = st.blankPages.map(p=>p.blob);
+    const r = await st.sample.json(prompt, opts);
+    const items = (Array.isArray(r?.items)?r.items:[]).map(normItem);
+    if (!items.length) throw {code:"empty"};
+    st.answerSheet = items; renderKey();
+    if (!st.selected.size){ items.forEach(it=>it.standards.forEach(c=>st.selected.add(c))); renderStdList(); }
+    keyStatus(`Built ${items.length} items. Check each answer, then save the assignment.${r.notes?" Note: "+r.notes:""}`);
+  }catch(e){ keyStatus(e?.code==="empty" ? "No questions were found. Try clearer photos or paste the questions." : errCopy(e), true); }
+  finally{ btn.disabled=false; }
+});
+function keyText(sheet){
+  return sheet.map(it=>`${it.n}. ${it.question}\n   Correct answer: ${it.answer}${it.accept?`\n   Also accept: ${it.accept}`:""}${it.explanation?`\n   Solution / full answer includes: ${it.explanation}`:""}${it.standards.length?`\n   Standards: ${it.standards.join(", ")}`:""}`).join("\n");
+}
+
+/* ---------- uploads ---------- */
+let pdfLib=null;
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>rej(new Error("load")); document.head.appendChild(s); }); }
+async function getPdf(){
+  if (pdfLib) return pdfLib;
+  const base="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+  await loadScript(base+"pdf.min.js"); await loadScript(base+"pdf.worker.min.js");
+  pdfLib = window["pdfjs-dist/build/pdf"]; pdfLib.GlobalWorkerOptions.workerSrc = base+"pdf.worker.min.js";
+  return pdfLib;
+}
+async function pdfToBlobs(file){
+  const lib = await getPdf();
+  const doc = await lib.getDocument({data: await file.arrayBuffer()}).promise;
+  const out=[];
+  for (let i=1;i<=doc.numPages;i++){
+    const page=await doc.getPage(i), v1=page.getViewport({scale:1});
+    const vp=page.getViewport({scale: Math.min(2.5, 1700/v1.width)});
+    const c=document.createElement("canvas"); c.width=vp.width; c.height=vp.height;
+    const ctx=c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
+    await page.render({canvasContext:ctx, viewport:vp}).promise;
+    const blob = await new Promise(r=>c.toBlob(r,"image/jpeg",0.9));
+    out.push({blob, name:`${file.name} p${i}`});
+  }
+  return out;
+}
+async function readFiles(list, report){
+  const out=[];
+  for (const f of list){
+    try{
+      if (f.type==="application/pdf" || /\.pdf$/i.test(f.name)){ report("Reading PDF pages…"); (await pdfToBlobs(f)).forEach(p=>out.push({...p, url:URL.createObjectURL(p.blob)})); }
+      else if (f.type.startsWith("image/")) out.push({blob:f, name:f.name, url:URL.createObjectURL(f)});
+      report("");
+    }catch(_){ report(`Couldn't open ${f.name}. Try exporting it as a JPG or PNG.`, true); }
+  }
+  return out;
+}
+async function addFiles(list){
+  st.pages.push(...await readFiles(list, setStatus));
+  renderThumbs();
+}
+function renderThumbs(){
+  $("#thumbs").innerHTML = st.pages.map((p,i)=>`<div class="thumb"><img src="${p.url}" alt="Page ${i+1}"><span>p${i+1}</span><button type="button" data-i="${i}" aria-label="Remove page ${i+1}">×</button></div>`).join("");
+}
+$("#thumbs").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; const [p]=st.pages.splice(+b.dataset.i,1); URL.revokeObjectURL(p.url); renderThumbs(); });
+$("#fileIn").addEventListener("change", e=>{ addFiles([...e.target.files]); e.target.value=""; });
+$("#camIn").addEventListener("change", e=>{ addFiles([...e.target.files]); e.target.value=""; });
+const drop=$("#drop");
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault(); drop.classList.add("over");}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault(); drop.classList.remove("over");}));
+drop.addEventListener("drop", e=>addFiles([...e.dataTransfer.files]));
+
+/* ---------- teacher sign-off (remembered in this browser) ---------- */
+function teacherSig(){ return $("#tSig").value.trim().slice(0,60); }
+try{ const v = localStorage.getItem("mm.sig"); if (v !== null) $("#tSig").value = v; }catch(_){}
+$("#tSig").addEventListener("change", ()=>{ try{ localStorage.setItem("mm.sig", teacherSig()); }catch(_){} });
+
+/* ---------- grading ---------- */
+function setStatus(msg, err, busy){
+  const s=$("#status"); s.className="status"+(err?" err":"");
+  s.innerHTML = (busy?'<span class="dot"></span>':"") + esc(msg||"");
+}
+function errCopy(e){
+  return ({
+    not_granted:"Claude access wasn't allowed for this page. Allow it from the page's permissions to grade.",
+    rate_limited:"Too many requests right now. Wait a minute and try again.",
+    image_rejected:"One of the pages couldn't be read. Retake it as a JPG or PNG under 20 MB.",
+    images_unavailable:"This view can't send images to Claude.",
+    invalid_json:"The grader's answer came back incomplete. Try again, or grade fewer pages at once.",
+    prompt_too_large:"That's too much to grade at once. Remove some pages or shorten the answer key.",
+    session_expired:"Your session expired. Sign in to claude.ai again.",
+    refused:"Claude declined to grade this. Check that the pages show student work.",
+    sampling_disabled:"Claude isn't available for this account."
+  })[e?.code] || "Grading didn't finish. Try again.";
+}
+function buildPrompt(d, name, nPages){
+  const all = flat(d.subject, d.grade);
+  const line = r => `${r.parent?"  ":""}${r.code}: ${r.text}`;
+  let chosen;
+  const assigned = d.standards.length ? d.standards : [...new Set(d.answerSheet.flatMap(i=>i.standards||[]))];
+  if (assigned.length){
+    const sel = new Set(assigned);
+    all.filter(r=>r.parent && sel.has(r.parent)).forEach(r=>sel.add(r.code)); // a chosen parent brings its sub-standards
+    chosen = "Grade ONLY against these assigned standards (indented lines are sub-standards):\n" + all.filter(r=>sel.has(r.code)).map(line).join("\n");
+  } else {
+    chosen = "No standards were assigned. Choose the standards from this list that the work actually assesses (indented lines are sub-standards):\n" + all.map(line).join("\n");
+  }
+  chosen += "\n\nSub-standards: when a standard has lettered sub-standards (e.g. NC.4.NF.3.c), score each sub-standard the work gives evidence for, using its full code, and do not also score the parent. Skip sub-standards the work doesn't touch. Standards without sub-standards are scored by their own code.";
+  const focus = {
+    math:"Check every computation and every step of work. In corrected_work, retype the student's work with each wrong step fixed and the correct answer. Accept any valid strategy (area models, number lines, tape diagrams, partial products, standard algorithm) — Eureka Math² emphasizes models, so credit correct models and explanations.",
+    ela:"For written responses: fix spelling, capitalization, punctuation, grammar and usage while keeping the student's own words, ideas and voice. For reading answers: also judge whether the answer is supported with text evidence. Don't rewrite a weak answer into a strong one in corrected_work; fix conventions, and put content advice in the corrections' 'why'.",
+    sci:"Judge scientific accuracy and use of vocabulary first, then conventions. Fix factual errors and misconceptions in corrected_work.",
+    ss:"Judge historical, civic, economic and geographic accuracy and use of evidence first, then conventions. Fix factual errors in corrected_work."
+  }[d.subject];
+  return `You are an experienced North Carolina grade ${d.grade} teacher grading student work against the NC Standard Course of Study. ${nPages} scanned page image(s) of ONE student's work are attached, in order.
+
+Assignment: ${d.title||"(untitled)"}
+Subject: ${SUBJ[d.subject]} · Curriculum: ${d.curriculum}${d.lesson?" · "+d.lesson:""}
+Student: ${name||"(read the name from the paper if written)"}
+${d.answerSheet.length ? `ANSWER SHEET (the teacher's key; grade every item against it, accept the listed alternate forms, and use each item's standards when scoring):\n${keyText(d.answerSheet)}` : "No answer sheet: solve the problems yourself and grade against the correct answers."}
+Teacher's rubric / notes: ${d.answerKey||"(none)"}
+
+${chosen}
+
+Mastery scale (whole numbers only):
+${[4,3,2,1].map(n=>LVDEF[n]).join("\n")}
+
+Steps:
+1. Read the handwriting carefully. Transcribe exactly what the student wrote into student_work — keep their spelling, capitalization and punctuation. Write [illegible] for anything you can't read; never guess silently. Describe drawings or models briefly in [brackets].
+2. Retype the work as corrected_work with errors fixed. If an item is fully correct, corrected_work equals student_work and corrections is empty.
+3. List each correction: original (the student's words/numbers), fix, and why. Write each "why" the way a teacher explains it beside the student at their desk: 1–2 short sentences that name the rule or idea in kid words and show it with a tiny example or a quick check the student can do next time (e.g. "7/5 is more than one whole. Pull out 5/5 to make 1, and you have 2/5 left over." / "When you're talking about more than one, add -s: two dogs, three apples."). Never just restate the fix.
+4. ${focus}
+5. Score each standard 1–4 with specific evidence from the paper and one concrete next step. Then give one overall level (1–4) that reflects the standards.
+6. Write student_feedback in the voice of an experienced upper elementary teacher writing a note on this paper:
+   - Talk to the student by first name, in first person ("I noticed…", "I can tell…"), with contractions, like a real person who knows this kid.
+   - Start with one specific thing they did well, pointing to the actual problem or sentence (not "great job").
+   - Then explain the most important mistake: what went wrong, WHY it matters, and how to fix it, with a quick example from their own work. Teach it, don't just name it.
+   - End with one clear thing to try next time and a short, genuine vote of confidence.
+   - 4–6 sentences at a grade ${d.grade} reading level. Warm and honest, never gushy or preachy. At most one exclamation point.
+   - Avoid generic praise ("Keep up the good work", "Awesome job!"), robotic phrasing ("Your response demonstrates…", "It is important to…"), mentions of standards codes or scores, and dashes used as pauses.
+   ${teacherSig()?`- Sign off on its own line as: ${teacherSig()}`:""}
+   Example of the voice (different assignment): "Jordan, I love how you drew a picture for problem 4. It shows me you understand what's happening in the story. On problem 2, you added the tops and the bottoms of the fractions. Remember, the bottom number tells the size of the pieces, and that doesn't change when you add same-size pieces: 1/5 + 2/5 is 3/5, not 3/10. Next time, ask yourself, 'What size are my pieces?' before you add. You're so close on this!"
+   Teacher-facing fields (summary, evidence, teacher_notes) stay brief and professional.
+
+Reply with only JSON in exactly this shape:
+{"detected":{"student_name":string|null,"assignment_title":string|null,"legibility":"clear"|"mostly clear"|"hard to read"},
+"overall":{"level":1|2|3|4,"summary":"one sentence for the teacher"},
+"items":[{"number":"1","prompt":"short version of the question or task","student_work":"exact transcription","corrected_work":"retyped with corrections","status":"correct"|"partial"|"incorrect"|"not attempted","corrections":[{"original":"","fix":"","why":""}],"standards":["code"]}],
+"standards":[{"code":"exact code from the list","level":1|2|3|4,"evidence":"","next_step":""}],
+"strengths":["2–3 specific strengths"],
+"next_steps":["2–3 specific next steps"],
+"student_feedback":"the teacher-voice note described in step 6",
+"teacher_notes":"anything the teacher should double-check",
+"flags":["e.g. page 2 partly cut off"]}`;
+}
+$("#gradeBtn").addEventListener("click", async ()=>{
+  if (!st.sample){ setStatus("Grading needs Claude, which isn't available in this view.", true); return; }
+  if (!st.pages.length){ setStatus("Add at least one scanned page first.", true); return; }
+  const max = st.caps?.images?.maxCount || 20;
+  if (st.pages.length > max){ setStatus(`Claude can read ${max} pages at a time. Remove ${st.pages.length-max} page(s).`, true); return; }
+  const d=formData(), name=$("#sName").value.trim();
+  const btn=$("#gradeBtn"), stop=$("#stopBtn");
+  btn.disabled=true; stop.hidden=false; st.ctl=new AbortController();
+  setStatus(`Reading ${st.pages.length} page(s) and grading… this can take up to a minute.`, false, true);
+  try{
+    const r = await st.sample.json(buildPrompt(d,name,st.pages.length), {
+      images: st.pages.map(p=>p.blob), signal: st.ctl.signal, cache:false,
+      modelTier: $("#careful").checked ? "complex" : "default"
+    });
+    if (!r || typeof r!=="object" || !r.overall) throw {code:"invalid_json"};
+    const valid = new Set(flat(d.subject, d.grade).map(x=>x.code));
+    r.standards = (r.standards||[]).filter(s=>valid.has(String(s.code))).sort((a,b)=>byOrder(a.code,b.code));
+    const { answerSheet, answerKey, ...meta } = d;
+    const rec = { ...meta, assignId: st.assignId || "", student: name || r.detected?.student_name || "Unnamed student",
+      title: d.title || r.detected?.assignment_title || "Untitled assignment",
+      standards: (d.standards.length ? d.standards : r.standards.map(s=>s.code)).slice().sort(byOrder),
+      result:r, level: clampLv(r.overall?.level), feedback: r.student_feedback||"", pages: st.pages.length, createdAt: Date.now() };
+    st.current = rec; renderResult($("#resultHost"), rec, {mode:"new"});
+    setStatus("Graded. Review, adjust the level if needed, then save to the gradebook.");
+    $("#resultHost").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"});
+  }catch(e){ if (e?.code!=="cancelled") setStatus(errCopy(e), true); else setStatus("Stopped."); }
+  finally{ btn.disabled=false; stop.hidden=true; st.ctl=null; }
+});
+$("#stopBtn").addEventListener("click", ()=>st.ctl?.abort());
+
+/* ---------- word diff ---------- */
+function diffHTML(a,b){
+  a=String(a||""); b=String(b||"");
+  if (a===b) return esc(b);
+  const A=a.match(/\S+\s*/g)||[], B=b.match(/\S+\s*/g)||[];
+  if (A.length*B.length > 250000) return esc(b);
+  const n=A.length, m=B.length, t=k=>k.trim(), L=Array.from({length:n+1},()=>new Uint16Array(m+1));
+  for (let i=n-1;i>=0;i--) for (let j=m-1;j>=0;j--) L[i][j] = t(A[i])===t(B[j]) ? L[i+1][j+1]+1 : Math.max(L[i+1][j],L[i][j+1]);
+  let i=0,j=0,out="";
+  while(i<n && j<m){
+    if (t(A[i])===t(B[j])){ out+=esc(B[j]); i++; j++; }
+    else if (L[i+1][j]>=L[i][j+1]){ out+=`<del>${esc(t(A[i]))}</del> `; i++; }
+    else { out+=`<ins>${esc(t(B[j]))}</ins>${esc(B[j].slice(t(B[j]).length))}`; j++; }
+  }
+  while(i<n){ out+=`<del>${esc(t(A[i]))}</del> `; i++; }
+  while(j<m){ out+=`<ins>${esc(t(B[j]))}</ins>${esc(B[j].slice(t(B[j]).length))}`; j++; }
+  return out;
+}
+
+/* ---------- result rendering ---------- */
+const STATUS_CLS = {correct:"bg4", partial:"bg2", incorrect:"bg1", "not attempted":"bg1"};
+function renderResult(host, rec, {mode}){
+  const r=rec.result||{}, lv=clampLv(rec.level)||clampLv(r.overall?.level)||2;
+  const items=r.items||[], stds=r.standards||[];
+  const editable = mode!=="example";
+  host.innerHTML = `<article class="result">
+    ${mode==="example"?`<div class="example-tag">Example result · sample student, not saved</div>`:""}
+    <div class="rhead">
+      <div class="mark lv${lv}" aria-label="Level ${lv}, ${LV[lv]}"><b>${lv}</b><small>${LV[lv]}</small></div>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
+        <h2>${esc(rec.student)}</h2>
+        <div class="meta">${esc(rec.title)} · ${rec.grade}th ${esc(SUBJ[rec.subject])} · ${esc(rec.curriculum||"")}${rec.lesson?" · "+esc(rec.lesson):""}${rec.createdAt?" · "+fmtDate(rec.createdAt):""}</div>
+        <div class="chips">${(rec.standards||[]).map(c=>`<span class="chip" title="${esc(stdText(c))}">${esc(c)}</span>`).join("")}</div>
+        ${r.overall?.summary?`<div>${esc(r.overall.summary)}</div>`:""}
+      </div>
+    </div>
+    ${editable?`<div class="rsec"><div class="row">
+      <div class="field" style="flex:0 1 220px"><label for="ovr">Overall level</label>
+        <select id="ovr">${[4,3,2,1].map(n=>`<option value="${n}" ${n===lv?"selected":""}>${n} · ${LV[n]}</option>`).join("")}</select></div>
+      <div class="scale">${[4,3,2,1].map(n=>`<span class="pill bg${n}">${n} ${LV[n]}</span>`).join("")}</div>
+    </div></div>`:""}
+    <div class="rsec"><div class="row" style="justify-content:space-between"><h3>Feedback for the student</h3><button class="btn small" type="button" id="copyFb">Copy</button></div>
+      ${editable?`<textarea id="fbText" class="fb" rows="4">${esc(rec.feedback)}</textarea>`:`<p class="fb" style="margin:0">${esc(rec.feedback)}</p>`}</div>
+    <div class="rsec"><h3>Standards</h3><div>${stds.map(s=>{const l=clampLv(s.level)||2; return `<div class="stdrow">
+      <div><code>${esc(s.code)}</code></div><div><span class="pill bg${l}">${l} · ${LV[l]}</span></div>
+      <div><p>${esc(s.evidence)}</p>${s.next_step?`<p class="ns">Next: ${esc(s.next_step)}</p>`:""}</div></div>`;}).join("") || `<p class="hint">No standards scored.</p>`}</div></div>
+    <div class="rsec"><h3>Item by item: what the student wrote, retyped with corrections</h3>
+      ${items.map(it=>`<div class="item">
+        <div class="item-h"><span class="num">${esc(it.number||"")}</span><span class="q">${esc(it.prompt||"")}</span><span class="pill ${STATUS_CLS[it.status]||"bg3"}">${esc(it.status||"")}</span></div>
+        <div class="item-b"><div><div class="lbl">Student wrote</div><div class="hand">${esc(it.student_work||"")}</div></div>
+          <div><div class="lbl">Retyped with corrections</div><div class="typed">${diffHTML(it.student_work, it.corrected_work)}</div></div></div>
+        ${(it.corrections||[]).length?`<ul class="fixes">${it.corrections.map(c=>`<li><span><span class="x">${esc(c.original)}</span> → <span class="y">${esc(c.fix)}</span></span><span>${esc(c.why)}</span></li>`).join("")}</ul>`:""}
+      </div>`).join("") || `<p class="hint">No items found on the page.</p>`}</div>
+    <div class="rsec two"><div><h3>Strengths</h3><ul>${(r.strengths||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
+      <div><h3>Next steps</h3><ul>${(r.next_steps||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div></div>
+    ${(r.teacher_notes||(r.flags||[]).length||r.detected?.legibility)?`<div class="rsec"><h3>For the teacher</h3>
+      ${r.detected?.legibility?`<div class="meta">Handwriting: ${esc(r.detected.legibility)}</div>`:""}
+      ${r.teacher_notes?`<div>${esc(r.teacher_notes)}</div>`:""}
+      ${(r.flags||[]).map(f=>`<div class="flag">⚑ ${esc(f)}</div>`).join("")}</div>`:""}
+    <div class="rsec"><div class="row">
+      ${mode==="new"?`<button class="btn primary" id="saveRec" type="button">Save to gradebook</button><button class="btn" id="nextStu" type="button">Next student</button>`:""}
+      ${mode==="saved"?`<button class="btn primary" id="updRec" type="button">Save changes</button><button class="btn" id="delRec" type="button">Delete</button>
+        <span class="confirm" id="delConf" hidden>Delete this graded paper? <button class="btn small red" id="delYes" type="button">Delete</button><button class="btn small" id="delNo" type="button">Keep</button></span>`:""}
+      <span class="hint" id="recMsg"></span></div></div>
+  </article>`;
+
+  const q = s => host.querySelector(s);
+  q("#copyFb")?.addEventListener("click", async ()=>{
+    const ta=q("#fbText"), txt = ta ? ta.value : rec.feedback;
+    try{ await navigator.clipboard.writeText(txt); q("#copyFb").textContent="Copied"; }
+    catch(_){ if(ta){ ta.focus(); ta.select(); } q("#copyFb").textContent="Press Ctrl+C"; }
+    setTimeout(()=>{ const b=q("#copyFb"); if(b) b.textContent="Copy"; },2000);
+  });
+  q("#ovr")?.addEventListener("change", e=>{ rec.level=+e.target.value; const lvN=rec.level, m=q(".mark"); m.className="mark lv"+lvN; m.innerHTML=`<b>${lvN}</b><small>${LV[lvN]}</small>`; });
+  q("#fbText")?.addEventListener("input", e=>{ rec.feedback=e.target.value; });
+  const msg = t => { const m=q("#recMsg"); if(m) m.textContent=t; };
+  q("#saveRec")?.addEventListener("click", async ()=>{
+    if (!st.db){ msg("Sign in to claude.ai to save to the gradebook."); return; }
+    try{ const {id, ...body}=rec; const ref=await col("grades").add(body); rec.id=ref.id; q("#saveRec").disabled=true; msg(`Saved to the gradebook.`);
+      const a = st.assigns.find(x=>x.id===rec.assignId) || st.assigns.find(x=>norm(x.title)===norm(rec.title) && x.grade===rec.grade && x.subject===rec.subject);
+      if (a){ const b=document.createElement("button"); b.type="button"; b.className="btn small"; b.textContent="Open class sheet";
+        b.addEventListener("click", ()=>{ st.sheetId=a.id; st.sheetOpen=null; showTab("assign"); renderSheet(); $("#sheetHost").scrollIntoView({block:"start"}); });
+        q("#recMsg").after(b); }
+    }
+    catch(e){ msg("Couldn't save: "+(e?.message||"try again")); }
+  });
+  q("#nextStu")?.addEventListener("click", ()=>{
+    st.pages.forEach(p=>URL.revokeObjectURL(p.url)); st.pages=[]; renderThumbs(); $("#sName").value=""; host.innerHTML=""; setStatus("Ready for the next student. The assignment and standards stay the same.");
+    $("#sName").focus();
+  });
+  q("#updRec")?.addEventListener("click", async ()=>{
+    try{ await col("grades").doc(rec.id).update({level:rec.level, feedback:rec.feedback}); msg("Saved."); }catch(e){ msg("Couldn't save: "+(e?.message||"try again")); }
+  });
+  q("#delRec")?.addEventListener("click", ()=>{ q("#delConf").hidden=false; });
+  q("#delNo")?.addEventListener("click", ()=>{ q("#delConf").hidden=true; });
+  q("#delYes")?.addEventListener("click", async ()=>{ try{ await col("grades").doc(rec.id).delete(); st.bkOpen=null; host.innerHTML=""; }catch(_){ msg("Couldn't delete."); } });
+}
+
+/* ---------- gradebook ---------- */
+function bkFiltered(){
+  const q=$("#bkSearch").value.trim().toLowerCase(), s=$("#bkSubj").value;
+  return st.grades.filter(g=>(!s||g.subject===s) && (!q || (g.student+" "+g.title).toLowerCase().includes(q)));
+}
+function renderBook(){
+  const body=$("#bkBody"), bars=$("#bars");
+  if (!st.db){ body.innerHTML=`<tr><td colspan="6" class="empty">Sign in to claude.ai to keep a gradebook. Graded papers are saved privately to your account.</td></tr>`; bars.innerHTML=`<p class="hint">Averages appear once papers are saved.</p>`; return; }
+  const rows=bkFiltered();
+  body.innerHTML = rows.length ? rows.map(g=>{const l=clampLv(g.level)||2; return `<tr data-id="${esc(g.id)}" tabindex="0">
+    <td>${fmtDate(g.createdAt)}</td><td>${esc(g.student)}</td><td>${esc(g.title)}</td><td>${g.grade}th ${esc(SUBJ[g.subject]||"")}</td>
+    <td><div class="chips">${(g.standards||[]).map(c=>`<span class="chip">${esc(c)}</span>`).join("")}</div></td>
+    <td><span class="pill bg${l}">${l} · ${LV[l]}</span></td></tr>`;}).join("")
+    : `<tr><td colspan="6" class="empty">${st.grades.length?"No papers match that filter.":"No graded papers yet. Grade a scan on the Grade work tab and choose “Save to gradebook”."}</td></tr>`;
+  const agg={};
+  rows.forEach(g=>(g.result?.standards||[]).forEach(s=>{ const l=clampLv(s.level); if(!l) return; (agg[s.code] ||= []).push(l); }));
+  const keys=Object.keys(agg).sort(byOrder);
+  bars.innerHTML = keys.length ? keys.map(k=>{ const a=agg[k], avg=a.reduce((x,y)=>x+y,0)/a.length, f=Math.round(avg);
+    return `<div class="bar" title="${esc(stdText(k))}"><code>${esc(k)}</code><div class="track"><div class="fill f${f}" style="width:${(avg/4*100).toFixed(1)}%"></div></div><span>${avg.toFixed(1)}</span></div>`;}).join("")
+    + `<p class="hint">${rows.length} paper(s) · average of standard levels, 1–4</p>`
+    : `<p class="hint">Averages appear once papers are saved.</p>`;
+  if (st.bkOpen){ const g=st.grades.find(x=>x.id===st.bkOpen); if(!g){ $("#bkDetail").innerHTML=""; st.bkOpen=null; } }
+}
+$("#bkSearch").addEventListener("input", renderBook);
+$("#bkSubj").addEventListener("change", renderBook);
+function openRec(id){ const g=st.grades.find(x=>x.id===id); if(!g) return; st.bkOpen=id; renderResult($("#bkDetail"), {...g}, {mode:"saved"}); $("#bkDetail").scrollIntoView({block:"start"}); }
+$("#bkBody").addEventListener("click", e=>{ const tr=e.target.closest("tr[data-id]"); if(tr) openRec(tr.dataset.id); });
+$("#bkBody").addEventListener("keydown", e=>{ if(e.key==="Enter"){ const tr=e.target.closest("tr[data-id]"); if(tr) openRec(tr.dataset.id); }});
+$("#csvBtn").addEventListener("click", async ()=>{
+  const rows=bkFiltered(); const btn=$("#csvBtn");
+  if (!rows.length){ btn.textContent="Nothing to export"; setTimeout(()=>btn.textContent="Export CSV",2000); return; }
+  if (!st.downloads){ btn.textContent="Downloads unavailable here"; setTimeout(()=>btn.textContent="Export CSV",2500); return; }
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const lines=[["Date","Student","Assignment","Grade","Subject","Curriculum","Lesson","Overall level","Standard","Standard level","Evidence","Next step","Student feedback"].map(q).join(",")];
+  rows.forEach(g=>{ const ss=g.result?.standards?.length?g.result.standards:[{}];
+    ss.forEach(s=>lines.push([fmtDate(g.createdAt),g.student,g.title,g.grade,SUBJ[g.subject],g.curriculum,g.lesson,g.level,s.code,s.level,s.evidence,s.next_step,g.feedback].map(q).join(","))); });
+  try{ await st.downloads.save({filename:`gradebook-${new Date().toISOString().slice(0,10)}.csv`, data:lines.join("\r\n")}); }catch(_){}
+});
+
+/* ---------- tabs ---------- */
+function showTab(t){
+  document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected", String(b.dataset.tab===t)));
+  ["grade","assign","book"].forEach(x=>$("#tab-"+x).hidden = x!==t);
+}
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
+
+/* ---------- example (shown until the first real grade) ---------- */
+const EXAMPLE = { student:"Maya R. (example)", title:"Adding mixed numbers exit ticket", grade:"4", subject:"math", curriculum:"Eureka Math²", lesson:"Module 3, Topic C, Lesson 12", standards:["NC.4.NF.3.a","NC.4.NF.3.c"], level:3,
+  feedback:"Maya, your number line on #2 is exactly what I was hoping to see. Every jump is the same size, so I can tell you really get what a fourth is. On #3 you did the hard part: 3 + 2 is 5, and 4/5 + 3/5 is 7/5. But 7/5 is more than a whole, because 5/5 makes 1. So pull out that whole and you get 6 2/5. Next time, look at your fraction before you write the final answer and ask, \"Is the top bigger than the bottom?\" If it is, regroup. You've got this.\n— Mr. Echols",
+  result:{ detected:{legibility:"mostly clear"}, overall:{level:3,summary:"Solid with like-denominator addition; needs to regroup improper fractions in mixed-number sums."},
+   items:[
+    {number:"1",prompt:"2/6 + 3/6",student_work:"2/6 + 3/6 = 5/6",corrected_work:"2/6 + 3/6 = 5/6",status:"correct",corrections:[]},
+    {number:"2",prompt:"Use a number line to solve 1 1/4 + 2/4",student_work:"1 1/4 + 2/4 = 1 3/4 [number line from 1 to 2 with jumps of 1/4]",corrected_work:"1 1/4 + 2/4 = 1 3/4 [number line from 1 to 2 with jumps of 1/4]",status:"correct",corrections:[]},
+    {number:"3",prompt:"3 4/5 + 2 3/5. Explain.",student_work:"3 4/5 + 2 3/5 = 5 7/5 becuase I add the wholes then the parts",corrected_work:"3 4/5 + 2 3/5 = 6 2/5 because I add the wholes, then the parts, and 7/5 is 1 2/5",status:"partial",
+     corrections:[{original:"5 7/5",fix:"6 2/5",why:"7/5 is more than one whole, since 5/5 = 1. Pull out that 1 and add it to your 5 wholes, and you have 2/5 left over."},{original:"becuase",fix:"because",why:"This one's tricky! Try saying it in parts: be-cause. The a comes before the u, just like in the word “cause.”"}]}],
+   standards:[{code:"NC.4.NF.3.a",level:4,evidence:"Number line in #2 shows 1 1/4 + 2/4 as joining fourths of the same whole; explanation in #3 adds wholes then parts.",next_step:"Use this model to show regrouping when parts add up to more than 1."},
+     {code:"NC.4.NF.3.c",level:2,evidence:"Correct sums in #1 and #2; #3 left as 5 7/5 instead of 6 2/5.",next_step:"Practice renaming improper fractions inside mixed-number sums."}],
+   strengths:["Accurate like-denominator addition","Clear number line model with equal jumps"],
+   next_steps:["Regroup fractions greater than 1 into wholes","Write the regrouping step in explanations"],
+   teacher_notes:"Handwriting in #3 slanted; the 7 could be read as a 1 — confirm.", flags:[] } };
+
+/* ---------- boot ---------- */
+fillCurr(); renderStdList();
+renderResult($("#resultHost"), EXAMPLE, {mode:"example"});
+initCaps();
+})();
+</script>
+
+</body></html>
