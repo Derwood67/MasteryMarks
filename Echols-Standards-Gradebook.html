@@ -449,12 +449,12 @@ function render(){ if(rq) return; rq=true; requestAnimationFrame(()=>{rq=false; 
   draw();})}
 document.addEventListener("focusout",()=>{if(deferred){deferred=false;setTimeout(render,0)}});
 
-const TABS=[["assign","Assignments"],["gb","Gradebook"],["arch","Archive"],["class","Class"],["rep","Reports"],["custom","Custom"]];
+const TABS=[["assign","Assignments"],["work","Student work"],["gb","Gradebook"],["arch","Archive"],["class","Class"],["rep","Reports"],["custom","Custom"]];
 function drawTabs(){const n=$("tabs");n.replaceChildren(...TABS.map(([k,l])=>h("button",{class:"tab",role:"tab","aria-selected":String(S.tab===k),onclick:()=>{S.tab=k;S.openA=null;S.openC=null;draw();scrollTo(0,0)}},l)))}
 function draw(){
   drawTabs();
   const m=$("main"); const y=scrollY;
-  const v={assign:S.openA?viewAssignment:viewAssignments,gb:viewGradebook,arch:viewArchive,class:viewClass,rep:viewReports,custom:viewCustom}[S.tab]();
+  const v={assign:S.openA?viewAssignment:viewAssignments,gb:viewGradebook,arch:viewArchive,class:viewClass,rep:viewReports,custom:viewCustom,work:viewWork}[S.tab]();
   m.replaceChildren(...[].concat(v).flat(Infinity).filter(x=>x!=null&&x!==false));
   document.querySelectorAll(".overlay").forEach(o=>o.remove());
   if(S.viewSub) drawViewer();
@@ -1214,6 +1214,68 @@ function viewGradebook(){
   ];
 }
 
+async function shrinkForPrint(blob){
+  const bmp=await createImageBitmap(blob); const k=Math.min(1,1300/Math.max(bmp.width,bmp.height));
+  const cv=document.createElement("canvas"); cv.width=Math.round(bmp.width*k); cv.height=Math.round(bmp.height*k);
+  const ctx=cv.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height); ctx.drawImage(bmp,0,0,cv.width,cv.height);
+  return cv.toDataURL("image/jpeg",0.8);
+}
+/* ---------------- Student work (sorted) ---------------- */
+const SORTS=[["name","Name (A–Z)"],["high","Score (highest first)"],["low","Score (lowest first)"],["review","Needs review first"],["date","Turned in (newest first)"],["missing","Missing work first"]];
+function avgScore(a,st,sub){ if(!sub) return null; const v=codesFor(a,st).map(c=>(sub.scores||{})[c]).filter(Boolean); return v.length?v.reduce((x,y)=>x+y,0)/v.length:null; }
+function viewWork(){
+  const list=Object.values(S.assignments).sort((x,y)=>(y.created||0)-(x.created||0));
+  if(!list.length) return [h("h2",null,"Student work"),h("div",{class:"card empty"},"No assignments yet. Create one on the Assignments tab, then upload or scan student work.")];
+  const w=S.work||(S.work={aid:null,sort:"name",missing:true}); if(!S.assignments[w.aid]) w.aid=list[0].id;
+  const a=S.assignments[w.aid];
+  let rows=students(gradesOf(a)).map(st=>{const sub=S.submissions[a.id+"__"+st.id]; return {st,sub,avg:avgScore(a,st,sub)}});
+  const nameCmp=(x,y)=>x.st.name.localeCompare(y.st.name);
+  const by={name:nameCmp,
+    high:(x,y)=>(x.avg==null)-(y.avg==null)||(y.avg||0)-(x.avg||0)||nameCmp(x,y),
+    low:(x,y)=>(x.avg==null)-(y.avg==null)||(x.avg||0)-(y.avg||0)||nameCmp(x,y),
+    review:(x,y)=>((y.sub&&y.sub.status==="review")-(x.sub&&x.sub.status==="review"))||nameCmp(x,y),
+    date:(x,y)=>(!x.sub)-(!y.sub)||((y.sub&&y.sub.submittedAt)||0)-((x.sub&&x.sub.submittedAt)||0)||nameCmp(x,y),
+    missing:(x,y)=>(!!x.sub)-(!!y.sub)||nameCmp(x,y)}[w.sort]||nameCmp;
+  rows.sort(by);
+  const turned=rows.filter(r=>r.sub), graded=rows.filter(r=>r.avg!=null);
+  const classAvg=graded.length?graded.reduce((t,r)=>t+r.avg,0)/graded.length:null;
+  const shown=w.missing?rows:turned;
+  const printable=turned.filter(r=>r.sub.ai||r.sub.status==="accepted").map(r=>r.sub);
+  const sortName=SORTS.find(x=>x[0]===w.sort)[1];
+  return [
+    h("h2",null,"Student work"),
+    h("div",{class:"card"},
+      h("div",{class:"grid2"},
+        h("label",{class:"f"},"Assignment",h("select",{id:"workA",onchange:e=>{w.aid=e.target.value;draw()}},list.map(x=>h("option",{value:x.id,selected:x.id===a.id},`${x.title} · ${gradeLabel(x)} ${SUBJ[x.subj]}`)))),
+        h("label",{class:"f"},"Sort by",h("select",{id:"workSort",onchange:e=>{w.sort=e.target.value;draw()}},SORTS.map(([k,l])=>h("option",{value:k,selected:w.sort===k},l))))),
+      h("label",{class:"row small"},h("input",{type:"checkbox",id:"workMissing",checked:w.missing,onchange:e=>{w.missing=e.target.checked;draw()}}),"Show students with no work turned in"),
+      h("div",{class:"row",style:"gap:8px"},
+        h("span",{class:"pill"},`${turned.length} turned in`),
+        rows.length-turned.length?h("span",{class:"pill rev"},`${rows.length-turned.length} missing`):null,
+        classAvg!=null?h("span",{class:"pill ok"},`Class average ${classAvg.toFixed(1)}`):null),
+      h("div",{class:"row"},
+        printBtn(()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true}),`Print all (${printable.length}) with work, grades and feedback`,"primary"),
+        h("button",{class:"btn",onclick:()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true})},"Download PDF")),
+      h("div",{class:"small muted"},"Prints in the order shown: each student's grades and your feedback, followed by their scanned pages.")),
+    shown.length?h("div",{class:"list"},shown.map(({st,sub,avg})=>{
+      const key=a.id+"__"+st.id;
+      if(!sub) return h("div",{class:"sub"},h("div",{class:"subhead"},h("span",{class:"name"},st.name),h("span",{class:"pill rev"},"No work turned in"),
+        upBtns({mode:"student",aid:a.id,sid:st.id},"Upload work",`Scan ${st.name}'s work`,{scanLabel:"Scan"})));
+      return h("div",{class:"sub"},
+        h("div",{class:"subhead"},h("span",{class:"name"},st.name,a.versions?h("span",{class:"pill",style:"margin-left:8px"},TIER[lvlOf(st)].label):null),
+          avg!=null?h("span",{class:"badge b"+Math.round(avg),title:"Average score"},avg.toFixed(1)):null,
+          h("span",{class:"pill "+(sub.status==="accepted"?"ok":sub.status==="review"?"rev":"")},{accepted:"Graded",review:"Needs review",uploaded:"Not graded",error:"Needs attention"}[sub.status]||sub.status)),
+        h("div",{class:"row",style:"gap:6px"},codesFor(a,st).map(c=>h("span",{class:"row",style:"gap:4px"},h("span",{class:"code"},c),badge((sub.scores||{})[c]))),
+          sub.ai&&sub.ai.correct?h("span",{class:"small muted"},`· Correct: ${sub.ai.correct}`):null),
+        sub.pages&&sub.pages.length?h("div",{class:"thumbs"},sub.pages.map((p,i)=>h("img",{src:pageSrc(p),alt:`${st.name}, page ${i+1}`,loading:"lazy",onclick:()=>{S.viewSub=key;draw()}}))):null,
+        (sub.ai||sub.status==="accepted")?h("label",{class:"f"},`Feedback from ${teacherName()}`,h("textarea",{id:"wfb-"+key,style:"min-height:60px",onchange:e=>put("submissions",key,{...S.submissions[key],feedback:e.target.value})},fbOf(sub))):null,
+        h("div",{class:"row"},
+          (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
+          h("button",{class:"btn ghost",onclick:()=>{S.viewSub=key;draw()}},"View pages"),
+          h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change grade")));
+    })):h("div",{class:"card empty"},"No work turned in yet for this assignment.")
+  ];
+}
 /* ---------------- Archive ---------------- */
 function viewArchive(){
   const f=S.arch; const q=f.q.trim().toLowerCase();
@@ -1284,9 +1346,11 @@ function viewClass(){
 /* ---------------- feedback + student PDFs ---------------- */
 function teacherName(){ return (S.settings.teacher||"").trim()||"Mr. Echols"; }
 function fbOf(sub){ return sub.feedback!=null?sub.feedback:((sub.ai&&sub.ai.feedback)||""); }
-async function studentPdf(subs,fname){
+async function studentPdf(subs,fname,opts){
+  opts=opts||{};
   
-  subs=subs.filter(s=>s&&S.assignments[s.assignmentId]&&S.students[s.studentId]).sort((x,y)=>S.students[x.studentId].name.localeCompare(S.students[y.studentId].name));
+  subs=subs.filter(s=>s&&S.assignments[s.assignmentId]&&S.students[s.studentId]);
+  if(!opts.keepOrder) subs.sort((x,y)=>S.students[x.studentId].name.localeCompare(S.students[y.studentId].name));
   if(!subs.length){toast("No graded papers to print yet.");return}
   try{
     toast("Building PDF…");
@@ -1295,7 +1359,8 @@ async function studentPdf(subs,fname){
     const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"pt",format:"letter"});
     const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=48, TW=W-2*M;
     const SC={1:[192,72,42],2:[185,129,18],3:[46,138,85],4:[45,99,180]}; const T=teacherName();
-    subs.forEach((sub,si)=>{
+    for(let si=0;si<subs.length;si++){ const sub=subs[si];
+      if(opts.pages&&subs.length>1) toast(`Building PDF… ${si+1} of ${subs.length}`);
       const a=S.assignments[sub.assignmentId], st=S.students[sub.studentId];
       if(si) doc.addPage();
       let y=0; const need=n=>{ if(y+n>H-50){ doc.addPage(); y=50; } };
@@ -1341,7 +1406,19 @@ async function studentPdf(subs,fname){
         doc.setFont("helvetica","normal"); doc.setTextColor(40,50,45); doc.setDrawColor(23,32,28);
         vk.answers.forEach((x,i)=>{ if(i){ need(14); cur.y+=7; doc.setDrawColor(220,226,223); doc.setLineWidth(0.5); doc.line(M,cur.y,M+TW,cur.y); doc.setDrawColor(23,32,28); cur.y+=5; } drawRich(doc,`${x.n}.  ${x.answer}`,M,cur,TW,10,a.subj==="math",need); });
       }
-    });
+      if(opts.pages&&sub.pages&&sub.pages.length){
+        for(let pi=0;pi<sub.pages.length;pi++){
+          try{
+            const r=await fetch(pageSrc(sub.pages[pi])); if(!r.ok) continue;
+            const url=await shrinkForPrint(await r.blob());
+            doc.addPage(); doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(23,32,28);
+            doc.text(`${st.name}  ·  ${a.title}  ·  student work, page ${pi+1} of ${sub.pages.length}`,M,34);
+            const img=doc.getImageProperties(url); const maxW=TW, maxH=H-46-44; const k=Math.min(maxW/img.width,maxH/img.height);
+            doc.addImage(url,"JPEG",M+(maxW-img.width*k)/2,46,img.width*k,img.height*k,undefined,"FAST");
+          }catch(e){}
+        }
+      }
+    }
     const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(140,150,145);doc.text(`Page ${i} of ${n}`,W-M,H-24,{align:"right"})}
     await outPdf(doc,`${fname.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`);
     toast("PDF saved.");
