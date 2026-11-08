@@ -1472,6 +1472,34 @@ async function saveFile(o){
   const link=document.createElement("a"); link.href=url; link.download=o.filename; document.body.append(link); link.click(); link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),10000); return {status:"saved"};
 }
+async function exportXlsx(){
+  try{
+    toast("Building spreadsheet…");
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+    const X=window.XLSX; const all=students();
+    const summary=all.map(st=>{const row={Student:st.name,Grade:Number(st.grade),Level:TIER[lvlOf(st)].label};
+      for(const k of Object.keys(SUBJ)){const v=subjAvg(st,st.grade,k);row[`${SUBJ[k]} average`]=v==null?"":Math.round(v*10)/10}
+      row["Standards scored"]=Object.keys(st.scores||{}).filter(c=>STDTEXT[c]).length; return row;});
+    const stds=[]; for(const st of all) for(const k of Object.keys(SUBJ)) for(const st2 of STD[st.grade][k]) for(const [c,t] of st2.i){
+      const v=(st.scores||{})[c]; if(!v) continue;
+      stds.push({Student:st.name,Grade:Number(st.grade),Subject:SUBJ[k],Strand:st2.s,Standard:c,Description:t,Score:v,Level:LEVELS[v]}); }
+    const work=Object.values(S.submissions).filter(s=>S.assignments[s.assignmentId]&&S.students[s.studentId]).sort((x,y)=>(x.submittedAt||0)-(y.submittedAt||0)).map(s=>{
+      const a=S.assignments[s.assignmentId], st=S.students[s.studentId];
+      return {Date:s.submittedAt?new Date(s.submittedAt).toLocaleDateString():"",Student:st.name,Grade:Number(st.grade),Assignment:a.title,Subject:SUBJ[a.subj],
+        Version:a.versions?TIER[lvlOf(st)].label:"",Status:{accepted:"Graded",review:"Needs review",uploaded:"Not graded",error:"Needs attention"}[s.status]||s.status,
+        Scores:codesFor(a,st).map(c=>`${c}: ${(s.scores||{})[c]||"–"}`).join("; "),Correct:(s.ai&&s.ai.correct)||"",Feedback:fbOf(s)};});
+    const assigns=Object.values(S.assignments).sort((x,y)=>(x.created||0)-(y.created||0)).map(a=>({Created:a.created?new Date(a.created).toLocaleDateString():"",Title:a.title,Grades:gradeLabel(a),Subject:SUBJ[a.subj],Standards:a.codes.join(", "),"Differentiated":a.versions?"Yes":"No"}));
+    const wb=X.utils.book_new();
+    const add=(rows,name,widths,empty)=>{const ws=X.utils.json_to_sheet(rows.length?rows:[empty]); ws["!cols"]=widths.map(w=>({wch:w})); X.utils.book_append_sheet(wb,ws,name);};
+    add(summary,"Summary",[24,7,12,12,12,12,16,16],{Student:"No students yet"});
+    add(stds,"Standards",[24,7,14,28,14,60,7,12],{Student:"No scores yet"});
+    add(work,"Graded work",[11,24,7,32,14,12,13,40,10,60],{Student:"No graded work yet"});
+    add(assigns,"Assignments",[11,36,13,14,40,14],{Title:"No assignments yet"});
+    const buf=X.write(wb,{bookType:"xlsx",type:"array"});
+    await saveFile({filename:`Gradebook backup ${new Date().toISOString().slice(0,10)}.xlsx`,data:new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})});
+    toast("Spreadsheet saved.");
+  }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the spreadsheet. Check your connection and try again."); }
+}
 /* ---------------- Reports + PDF ---------------- */
 function subjAvg(st,g,k){const v=flat(g,k).map(([c])=>(st.scores||{})[c]).filter(Boolean); return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null}
 function viewReports(){
@@ -1484,6 +1512,8 @@ function viewReports(){
         h("label",{class:"f"},"Student",h("select",{id:"repS",onchange:e=>{r.student=e.target.value;draw()}},h("option",{value:"all"},"Every student (one page each)"),pool.map(s=>h("option",{value:s.id,selected:s.id===r.student},s.name))))),
       h("label",{class:"row small"},h("input",{type:"checkbox",id:"repU",checked:r.ungraded,onchange:e=>{r.ungraded=e.target.checked}}),"Include standards that haven't been scored yet"),
       h("div",{class:"row"},h("button",{class:"btn primary",disabled:!chosen.length,onclick:()=>makePdf(chosen)},`Download PDF (${chosen.length} student${chosen.length===1?"":"s"})`)),
+      h("div",{class:"row"},h("button",{class:"btn",disabled:!students().length,onclick:exportXlsx},"Export to spreadsheet (.xlsx)"),
+        h("span",{class:"small muted"},"Every student, score, assignment and feedback note, as a backup you keep.")),
       null),
     chosen.length?h("div",{class:"card"},h("h3",null,"Preview"),h("div",{class:"tbl"},h("table",null,
       h("thead",null,h("tr",null,h("th",null,"Student"),h("th",null,"Gr"),Object.values(SUBJ).map(l=>h("th",null,l)),h("th",null,"Scored"))),
