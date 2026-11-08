@@ -455,9 +455,10 @@ function draw(){
   drawTabs();
   const m=$("main"); const y=scrollY;
   const v={assign:S.openA?viewAssignment:viewAssignments,gb:viewGradebook,arch:viewArchive,class:viewClass,rep:viewReports,custom:viewCustom}[S.tab]();
-  m.replaceChildren(...[].concat(v));
+  m.replaceChildren(...[].concat(v).flat(Infinity).filter(x=>x!=null&&x!==false));
   document.querySelectorAll(".overlay").forEach(o=>o.remove());
   if(S.viewSub) drawViewer();
+  if(S.keyView) drawKeyView();
   if(S.scan) drawScanner();
   drawJobs();
   scrollTo(0,y);
@@ -556,6 +557,45 @@ function saveStd(aid){
   put("assignments",aid,{...cur,codes,codesAuto:false,key,needsRegrade:!!(cur.needsRegrade||(changed&&graded))});
   S.editStd=null; toast(changed?"Standards updated.":"No changes."); draw();
 }
+async function gradeAll(aid){
+  const a=S.assignments[aid]; if(!a) return;
+  const todo=students(gradesOf(a)).map(st=>S.submissions[aid+"__"+st.id]).filter(s=>s&&s.pages&&s.pages.length&&(s.status==="uploaded"||s.status==="error")&&!S.busy[s.id]);
+  toast(`Grading ${todo.length} paper${todo.length>1?"s":""}. Watch progress with Grading in progress at the top.`,3000);
+  for(const s of todo) await regrade(aid,s.studentId);
+  toast(`Finished grading ${todo.length} paper${todo.length>1?"s":""}. Review and accept below.`);
+}
+/* ---------------- teacher answer key ---------------- */
+function parseKeyText(t){
+  return String(t||"").split("\n").map(l=>l.trim()).filter(Boolean).map((l,i)=>{ const m=l.match(/^(\d+[a-z]?)\s*[.):-]\s*(.*)$/i);
+    return {n:m?m[1]:String(i+1),question:"",answer:(m?m[2]:l).slice(0,400),notes:"",std:""}; }).filter(x=>x.answer).slice(0,80);
+}
+function drawKeyView(){
+  const a=S.assignments[S.keyView]; if(!a){S.keyView=null;return}
+  const close=()=>{S.keyView=null;draw()};
+  const tab=(S.keyTab&&S.keyTab[a.id])||"avg"; const v=verOf(a,tab); const has=v.key&&v.key.answers&&v.key.answers.length;
+  const busy=S.busy["key"+a.id];
+  const ov=h("div",{class:"overlay keyv",onclick:e=>{if(e.target===ov) close()}},
+    h("div",{class:"sheet",role:"dialog","aria-label":"Teacher answer key"},
+      h("div",{class:"row spread"},h("div",null,h("h2",null,"Teacher answer key"),h("div",{class:"small muted"},`${a.title} · ${gradeLabel(a)} ${SUBJ[a.subj]}`)),h("button",{class:"btn ghost",onclick:close},"Close")),
+      busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):null,
+      a.versions?tierTabs(tab,l=>{S.keyTab={...(S.keyTab||{}),[a.id]:l};draw()}):null,
+      has?[h("div",{class:"small muted"},"Every paper is graded against these answers. Change any answer here and it's used for the next paper graded."),
+          keyTable(v.key,a.id,a.versions?tab:null),
+          h("div",{class:"row"},printBtn(()=>keyPdf(a),a.versions?"Print answer keys":"Print answer key","primary"),h("button",{class:"btn",onclick:()=>keyPdf(a)},"Download PDF"))]
+        :h("div",{class:"small muted"},"No answer key yet. Type the answers, or scan or upload the blank assignment to have one made."),
+      h("details",{open:has?null:true},h("summary",null,has?"Replace with answers I type":"Type the answers"),
+        h("div",{class:"f",style:"margin-top:8px"},
+          h("textarea",{id:"keyType-"+a.id,style:"min-height:160px",placeholder:"One answer per line, e.g.\n1. 3/4\n2. B\n3. The narrator is Maya, so it is first person."}),
+          h("div",{class:"row"},h("button",{class:"btn primary",onclick:()=>{
+            const ans=parseKeyText(($("keyType-"+a.id)||{}).value); if(!ans.length){toast("Type at least one answer.");return}
+            const cur=S.assignments[a.id]; const nk={answers:ans,madeAt:Date.now(),typed:true};
+            if(cur.versions&&a.versions){ const versions={...cur.versions,[tab]:{...cur.versions[tab],key:nk}}; put("assignments",a.id,{...cur,versions,...(tab==="avg"?{key:nk}:{})}); }
+            else put("assignments",a.id,{...cur,key:nk});
+            toast(`Saved ${ans.length} answer${ans.length>1?"s":""}.`); draw();}},"Save answer key")))),
+      h("div",{class:"f"},h("span",{class:"small"},h("b",null,"Or make it from the blank assignment")),
+        upBtns({mode:"blank",aid:a.id},"Upload file","Scan the blank assignment",{needsClaude:true}))));
+  document.body.append(ov);
+}
 async function regradeAll(aid){
   const subs=Object.values(S.submissions).filter(s=>s.assignmentId===aid&&s.pages&&s.pages.length);
   put("assignments",aid,{...S.assignments[aid],needsRegrade:false});
@@ -628,6 +668,9 @@ function viewAssignment(){
         (()=>{const done=roster.map(st=>S.submissions[a.id+"__"+st.id]).filter(s=>s&&(s.ai||s.status==="accepted"));
           return done.length?h("span",{class:"row",style:"gap:8px"},printBtn(()=>studentPdf(done,`${a.title} - student pages`),`Print student pages (${done.length})`),
             h("button",{class:"btn ghost",onclick:()=>studentPdf(done,`${a.title} - student pages`)},"Download")):null})(),
+        (()=>{const todo=roster.map(st=>S.submissions[a.id+"__"+st.id]).filter(s=>s&&s.pages&&s.pages.length&&(s.status==="uploaded"||s.status==="error")&&!S.busy[s.id]);
+          return todo.length?h("button",{class:"btn primary",onclick:()=>{if(canClaude(true)) gradeAll(a.id)}},`Grade ${todo.length} paper${todo.length>1?"s":""}`):null;})(),
+        h("button",{class:"btn",onclick:()=>{S.keyView=a.id;draw()}},"Teacher answer key"),
         rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Accepted ${rev.length} grade${rev.length>1?"s":""}.`)}},`Accept all ${rev.length} suggested`):null,
         confirmBtn("delA"+a.id,"Delete assignment",()=>{Object.values(S.submissions).filter(s=>s.assignmentId===a.id).forEach(deleteSub);oldAssets(a);remove("assignments",a.id);S.openA=null;}))),
     a.ws?worksheetCard(a):null,
@@ -664,7 +707,8 @@ function subRow(a,st,sub){
       const row=h("div",{class:"row"});
       if(sub.status!=="accepted") row.append(h("button",{class:"btn primary",onclick:()=>{acceptSub(sub);toast("Grade saved to "+st.name+"'s record.")}},"Accept grade"));
       if(sub.ai||sub.status==="accepted") row.append(printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print")); row.append(h("button",{class:"btn ghost",onclick:()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`)},"Student PDF"));
-      if(CAP.sample&&sub.pages&&sub.pages.length&&!busy) row.append(h("button",{class:"btn ghost",onclick:()=>regrade(a.id,st.id)},sub.status==="uploaded"||sub.status==="error"?"Grade with Claude":"Regrade"));
+      if(sub.pages&&sub.pages.length&&!busy){ const fresh=sub.status==="uploaded"||sub.status==="error";
+        row.append(h("button",{class:fresh?"btn primary":"btn ghost",onclick:()=>{if(canClaude(true)) regrade(a.id,st.id)}},fresh?"Grade":"Regrade")); }
       parts.push(row);
     }
   }
@@ -930,7 +974,7 @@ async function gradeIt(key,blobs,text){
     put("submissions",key,{...S.submissions[key],ai,scores:{...scores},status:"review",error:""});
   }catch(e){
     if(e&&(e.code==="not_granted"||e.code==="sampling_disabled")) CAP.sample=null;
-    put("submissions",key,{...S.submissions[key],status:"error",error:errMsg(e,"Grading didn't finish. Tap Grade with Claude to try again.")});
+    put("submissions",key,{...S.submissions[key],status:"error",error:errMsg(e,"Grading didn't finish. Tap Grade to try again.")});
   }finally{ setBusy(key,null); }
 }
 function deleteSub(sub){ oldAssets(sub); remove("submissions",sub.id); }
@@ -1209,7 +1253,7 @@ function drawViewer(){
         confirmBtn("delS"+s.id,"Delete this submission",()=>{deleteSub(s);S.viewSub=null}))));
   document.body.append(ov);
 }
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&S.viewSub){S.viewSub=null;draw()}});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape") return; if(S.keyView){S.keyView=null;draw()} else if(S.viewSub){S.viewSub=null;draw()}});
 
 /* ---------------- Class ---------------- */
 let addG=4, addTxt="";
