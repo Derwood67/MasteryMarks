@@ -482,12 +482,12 @@ function jobList(){
     if(k.startsWith("stack")){ const a=S.assignments[k.slice(5)]; return {k,who:"Grading the class's papers",what:a?a.title:"",msg,open:a?{a:a.id}:null}; }
     if(k.startsWith("key")){ const id=k.slice(3); const a=S.assignments[id]; return {k,who:"Answer sheet",what:a?a.title:"New assignment",msg,open:a?{a:a.id}:null}; }
     if(/^c[a-z0-9]/.test(k)&&S.custom[k.slice(1)]){ const c=S.custom[k.slice(1)]; return {k,who:"Custom work",what:c.title,msg,open:{c:c.id}}; }
-    const [aid,sid]=k.split("__"); const a=S.assignments[aid], st=S.students[sid];
-    return {k,who:st?st.name:"Paper",what:a?a.title:"",msg,open:a?{a:a.id}:null};
+    const [aid,sid]=k.split("__"); const a=S.assignments[aid], st=S.students[sid]; const sb=S.submissions[k];
+    return {k,who:st?st.name:(sb?subName(sb):"Paper"),what:a?a.title:"",msg,open:a?{a:a.id}:null};
   }).concat(draft.busy?[{k:"draft",who:"New assignment",what:draft.title||"",msg:draft.busy,open:{tab:"assign"}}]:[])
     .concat(cdraft.busy?[{k:"cdraft",who:"Custom work",what:cdraft.type,msg:cdraft.busy,open:{tab:"custom"}}]:[]);
 }
-function toReview(){ return Object.values(S.submissions).filter(s=>s.status==="review"&&S.assignments[s.assignmentId]&&S.students[s.studentId]); }
+function toReview(){ return Object.values(S.submissions).filter(s=>s.status==="review"&&S.assignments[s.assignmentId]&&S.students[s.studentId]&&!s.unnamed); }
 function goJob(o){ S.jobsOpen=false; if(!o){draw();return} if(o.a){S.tab="assign";S.openA=o.a} else if(o.c){S.tab="custom";S.openC=o.c} else if(o.tab){S.tab=o.tab} draw(); scrollTo(0,0); }
 function drawJobs(){
   const box=$("jobBtn"); if(!box) return;
@@ -533,7 +533,7 @@ function viewGrade(){
     if(scan) scanFor({mode:"papers-new"},"Scan the class's papers"); else pickMode({mode:"papers-new"}); };
   const startOld=scan=>{ if(!canClaude(true)) return; if(scan) scanFor({mode:"stack",aid:a.id},"Scan the class's papers"); else pickMode({mode:"stack",aid:a.id}); };
   const out=[h("h2",null,"Grade papers"),
-    h("div",{class:"small muted"},"Three steps. Each student's name must be on their first page. Fronts and backs are both checked.")];
+    h("div",{class:"small muted"},"Three steps. Names on papers sort them to the right student; papers without a name are graded too. Fronts and backs are both checked.")];
   if((!CAP.sample||!CAP.imgOK)&&CAP.ready) out.push(h("div",{class:"notice small"},!CAP.sample?"Grading works when the gradebook is opened from its Claude link (claude.ai or the Claude app).":"This view can't send photos to Claude. Open the gradebook on claude.ai in a web browser to grade."));
   out.push(h("div",{class:"card"},
     h("h3",null,"1  Which assignment?"),
@@ -553,7 +553,7 @@ function viewGrade(){
       h("button",{class:"btn primary",onclick:()=>a?startOld(false):startNew(false)},"Upload papers")),
     h("div",{class:"small muted"},"Scan with your phone or tablet camera, or upload a PDF from the copier. Grading starts as soon as the papers are in."),
     a&&a.stackNote?h("div",{class:"notice small"},a.stackNote):null));
-  if(a) out.push(gradeResults(a));
+  if(a){ out.push(gradeResults(a)); const u=unnamedCard(a,false); if(u) out.push(u); }
   return out;
 }
 function gradeResults(a){
@@ -565,7 +565,7 @@ function gradeResults(a){
     h("h3",null,"3  Grades"),
     !rows.length?h("div",{class:"small muted"},"Grades show up here as each paper is finished."):null,
     rows.length?h("div",{class:"row"},
-      rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Saved ${rev.length} grade${rev.length>1?"s":""} to the gradebook.`)}},`Accept all ${rev.length} grades`):null,
+      rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Saved ${rev.length} grade${rev.length>1?"s":""} to the gradebook.`)}},`Accept all ${rev.length} grade${rev.length>1?"s":""}`):null,
       done.length?printBtn(()=>studentPdf(done,`${a.title} - graded papers`,{pages:true}),`Print all (${done.length}) with feedback`):null,
       h("button",{class:"btn ghost",onclick:()=>{S.keyView=a.id;draw()}},"Answer key")):null,
     rows.length?h("div",{class:"list"},rows.map(({st,sub})=>{
@@ -760,6 +760,7 @@ function viewAssignment(){
         rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Accepted ${rev.length} grade${rev.length>1?"s":""}.`)}},`Accept all ${rev.length} suggested`):null,
         confirmBtn("delA"+a.id,"Delete assignment",()=>{Object.values(S.submissions).filter(s=>s.assignmentId===a.id).forEach(deleteSub);oldAssets(a);remove("assignments",a.id);S.openA=null;}))),
     a.ws?worksheetCard(a):null,
+    unnamedCard(a,true),
     answerCard(a),
     stackCard(a),
   ];
@@ -1015,7 +1016,7 @@ async function gradeIt(key,blobs,text){
       :`Standards to score:\n${myCodes.map(c=>`- ${c}: ${STDTEXT[c]}`).join("\n")}\nWhere the answer sheet tags a question with a standard, base that standard's score on those questions.`,
     `Scale (score each standard separately, whole numbers only):\n4 = ${LEVEL_DESC[4]}\n3 = ${LEVEL_DESC[3]}\n2 = ${LEVEL_DESC[2]}\n1 = ${LEVEL_DESC[1]}`,
     `Judge the whole assignment across all pages. Compare each answer with the answer sheet. If the work shows no evidence for a standard, use null for that standard.`].join("\n\n");
-  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4 or null}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name: one strength, one next step. Never mention AI, Claude, or automated grading.", "items": [{"n": "question number", "right": true, "student": "what the student answered, short", "answer": "the correct answer (only when wrong)", "note": "if right: a short, specific bit of praise naming what they did well; if wrong: kindly explain the mistake and how to fix it, in words a 9–11 year old understands"}]}
+  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4 or null}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name (only if a name is written on the paper; otherwise use no name): one strength, one next step. Never mention AI, Claude, or automated grading.", "items": [{"n": "question number", "right": true, "student": "what the student answered, short", "answer": "the correct answer (only when wrong)", "note": "if right: a short, specific bit of praise naming what they did well; if wrong: kindly explain the mistake and how to fix it, in words a 9–11 year old understands"}]}
 Include one entry in "items" for every question, in order. Feedback notes speak to the student as ${teacherName()} would and never mention AI.`;
   try{
     let r, transcript="", legibility="";
@@ -1258,7 +1259,7 @@ async function keyFromPapers(aid,imgs){
 }
 /* New assignment straight from a stack of student papers: create it, make the key, sort and grade. */
 async function startGradingNew(files){
-  const grades=draftGrades(); if(!students(grades).length){ toast(`Add your ${grades.length>1?"grade 4 and 5":"grade "+grades[0]} students on the Class tab first.`); return; }
+  const grades=draftGrades();
   const id="a"+uid(); const title=draft.title.trim();
   put("assignments",id,{id,title:title||`Scanned assignment, ${new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"})}`,autoTitle:!title,
     grade:grades[0],grades,subj:draft.subj,codes:[...draft.codes],notes:draft.notes.trim(),key:null,pages:[],created:Date.now()});
@@ -1270,16 +1271,15 @@ async function startGradingNew(files){
 function stackCard(a){
   const busy=S.busy["stack"+a.id];
   return h("div",{class:"card",style:"border:2px solid var(--accent)"},h("h3",null,"Start grading"),
-    h("div",{class:"small muted"},`${a.key?"":"No answer key yet, so one is made from the papers first. "}Scan the class's papers, or upload them as one PDF or many photos. Each student needs their name on their first page. The pages are sorted by name and each paper is graded, up to 10 sheets per student. Scan front and back; blank backs are skipped.`),
+    h("div",{class:"small muted"},`${a.key?"":"No answer key yet, so one is made from the papers first. "}Scan the class's papers, or upload them as one PDF or many photos. Names on the first page sort the papers to each student; papers without a name are still graded. Each paper is graded, up to 10 sheets per student. Scan front and back; blank backs are skipped.`),
     busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload papers","Scan the class's papers",{needsClaude:true,primary:true,scanLabel:"Scan papers and start grading"})),
     a.stackNote?h("div",{class:"notice small"},a.stackNote):null);
 }
 async function uploadStack(aid,files){
   const k="stack"+aid; const a=S.assignments[aid]; const roster=students(gradesOf(a));
   try{
-    if(!roster.length) throw new Error(`Add your ${gradeLabel(a).toLowerCase()} students on the Class tab first.`);
     setBusy(k,"Preparing pages…");
-    const cap=Math.min(300,roster.length*MAX_PAGES+20);
+    const cap=300;
     const {blobs,total}=await prepareFiles(files,cap);
     if(!blobs.length) throw new Error("No pages found in those files.");
     if(!(S.assignments[aid].key&&S.assignments[aid].key.answers&&S.assignments[aid].key.answers.length)){
@@ -1292,32 +1292,86 @@ async function uploadStack(aid,files){
       const chunk=blobs.slice(i,i+CAP.imgMax);
       setBusy(k,`Finding names: pages ${i+1}–${i+chunk.length} of ${blobs.length}`);
       const r=await CAP.sample.json([`These ${chunk.length} images are consecutive scanned pages from a stack of student papers for the assignment "${a.title}".`,
-        `Class roster:\n${roster.map(s=>s.name).join("\n")}`,
+        roster.length?`Class roster:\n${roster.map(s=>s.name).join("\n")}`:"There is no class roster yet.",
         `For each image in order, read the handwritten student name if one is written on that page. Return the matching roster name exactly as listed, or "" if the page has no name or the name matches nobody on the roster. Set "first" to true if the page looks like the first page of a student's assignment (a name line, or the assignment's first question). Papers may be scanned front and back: a page with no name that continues a student's work, holds scratch work, or is the back of a sheet is never a first page, so set "first" to false for it.`,
-        `Reply with only a JSON array with one entry per image: [{"page": 1, "student": "Roster Name", "first": true}]`].join("\n\n"),{images:chunk,modelTier:"default"});
+        `Also give "written": the name exactly as written on the page, or "" if none. Pages with no name still count: mark where each new paper starts with "first" so they can be graded separately.`,
+        `Reply with only a JSON array with one entry per image: [{"page": 1, "student": "Roster Name", "written": "name as written", "first": true}]`].join("\n\n"),{images:chunk,modelTier:"default"});
       const arr=Array.isArray(r)?r:(r&&Array.isArray(r.pages)?r.pages:[]);
-      chunk.forEach((_,j)=>{const it=arr.find(x=>Number(x&&x.page)===j+1)||arr[j]||{}; labels.push({student:String(it.student||""),first:!!it.first})});
+      chunk.forEach((_,j)=>{const it=arr.find(x=>Number(x&&x.page)===j+1)||arr[j]||{}; labels.push({student:String(it.student||""),written:String(it.written||"").slice(0,60),first:!!it.first})});
     }
-    const groups=new Map(); let cur=null, unmatched=0, overflow=0;
+    /* A matched name starts (or continues) that student's paper. A new paper with no name, or a name not on the roster, becomes its own unnamed paper. */
+    const groups=new Map(); let cur=null, overflow=0, unnamedN=Object.values(S.submissions).filter(x=>x.assignmentId===aid&&x.unnamed).length;
     labels.forEach((l,i)=>{
-      const st=matchName(l.student,roster);
-      if(st) cur=st.id; else if(l.student.trim()||l.first) cur=null;
-      if(!cur){unmatched++;return}
-      if(!groups.has(cur)) groups.set(cur,[]);
-      const g=groups.get(cur); if(g.length<MAX_PAGES) g.push(blobs[i]); else overflow++;
+      const st=matchName(l.student,roster)||matchName(l.written,roster);
+      if(st) cur=st.id;
+      else if(l.first||l.written.trim()||!cur){ unnamedN++; cur="u"+uid(); groups.set(cur,{unnamed:true,label:`Paper ${unnamedN}`,written:l.written.trim(),pages:[]}); }
+      if(!groups.has(cur)) groups.set(cur,{pages:[]});
+      const g=groups.get(cur); if(g.pages.length<MAX_PAGES) g.pages.push(blobs[i]); else overflow++;
     });
-    let n=0;
-    for(const [sid,bl] of groups){ n++; setBusy(k,`Grading paper ${n} of ${groups.size}: ${S.students[sid].name}`); await submitPages(aid,sid,bl,""); }
+    let n=0; const unnamed=[...groups.values()].filter(g=>g.unnamed).length;
+    for(const [gid,g] of groups){ n++;
+      setBusy(k,`Grading paper ${n} of ${groups.size}: ${g.unnamed?g.label:S.students[gid].name}`);
+      if(g.unnamed) await submitUnnamed(aid,g); else await submitPages(aid,gid,g.pages,""); }
     const notes=[];
-    if(unmatched) notes.push(`${unmatched} page${unmatched>1?"s":""} couldn't be matched to a name on your ${gradeLabel(a).toLowerCase()} roster. Upload those with Upload work next to the right student.`);
+    if(unnamed) notes.push(`${unnamed} paper${unnamed>1?"s had":" had"} no name we could match, so ${unnamed>1?"they were":"it was"} graded as ${unnamed>1?"unnamed papers":"an unnamed paper"}. Pick whose paper it is to save the grade.`);
     if(overflow) notes.push(`${overflow} page${overflow>1?"s were":" was"} skipped because a student had more than ${MAX_PAGES} pages.`);
     if(total>cap) notes.push(`Only the first ${cap} pages of the scan were read.`);
     put("assignments",aid,{...S.assignments[aid],stackNote:notes.join(" ")});
-    toast(groups.size?`Graded ${groups.size} paper${groups.size>1?"s":""}. Review the suggestions below.`:"No student names were found. Check the scan.");
+    toast(groups.size?`Graded ${groups.size} paper${groups.size>1?"s":""}. Review the suggestions below.`:"No pages could be read. Check the scan.");
   }catch(e){ toast(errMsg(e,"The stack upload didn't finish. Try again.")); }
   finally{ setBusy(k,null); }
 }
 
+/* ---------------- papers without a name ---------------- */
+async function submitUnnamed(aid,g){
+  const key=aid+"__u"+uid();
+  setBusy(key,`Saving ${g.pages.length} page${g.pages.length===1?"":"s"}…`);
+  const pages=await uploadPages(g.pages);
+  put("submissions",key,{id:key,assignmentId:aid,studentId:null,unnamed:true,label:g.label,written:g.written||"",pages,text:"",status:"uploaded",scores:{},ai:null,error:"",submittedAt:Date.now()});
+  if(CAP.sample&&CAP.imgOK) await gradeIt(key,g.pages,""); else setBusy(key,null);
+}
+const unnamedOf=aid=>Object.values(S.submissions).filter(x=>x.assignmentId===aid&&x.unnamed).sort((x,y)=>(x.submittedAt||0)-(y.submittedAt||0));
+const subName=sub=>sub.unnamed?`${sub.label||"Unnamed paper"}${sub.written?` (written: ${sub.written})`:""}`:((S.students[sub.studentId]||{}).name||"Student");
+/* Moves an unnamed paper, with its grade and feedback, onto a student. */
+function assignPaper(sub,sid){
+  const st=S.students[sid]; if(!st) return;
+  const key=sub.assignmentId+"__"+sid, old=S.submissions[key];
+  if(old&&old.id!==sub.id) oldAssets(old);
+  const nx={...sub,id:key,studentId:sid,unnamed:false,label:"",written:""};
+  remove("submissions",sub.id); put("submissions",key,nx);
+  toast(old?`${st.name}'s earlier paper was replaced with this one.`:`Saved as ${st.name}'s paper.`);
+}
+function whoseBtn(sub,a){
+  const roster=students(gradesOf(a));
+  return h("select",{id:"who-"+sub.id,"aria-label":"Whose paper is this?",style:"width:auto;max-width:100%",onchange:e=>{if(e.target.value) assignPaper(S.submissions[sub.id],e.target.value)}},
+    h("option",{value:""},roster.length?"Whose paper is this?":"Add students on the Class tab first"),
+    roster.map(st=>h("option",{value:st.id},st.name+(S.submissions[a.id+"__"+st.id]?" (has a paper)":""))));
+}
+function unnamedCard(a,compact){
+  const list=unnamedOf(a.id); if(!list.length) return null; const math=a.subj==="math";
+  return h("div",{class:"card",style:"border:2px solid var(--s2)"},
+    h("h3",null,`Papers without a name (${list.length})`),
+    h("div",{class:"small muted"},"These were graded anyway. Pick whose paper each one is to save the grade to that student."),
+    h("div",{class:"list"},list.map(sub=>{ const busy=S.busy[sub.id];
+      return h("div",{class:"sub"},
+        h("div",{class:"subhead"},h("span",{class:"name"},subName(sub)),busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):
+          (()=>{const fake={grade:gradesOf(a)[0]}; const v=codesFor(a,fake).map(c=>(sub.scores||{})[c]).filter(Boolean); return v.length?h("span",{class:"badge b"+Math.round(v.reduce((x,y)=>x+y,0)/v.length)},(v.reduce((x,y)=>x+y,0)/v.length).toFixed(1)):null;})(),
+          sub.ai&&sub.ai.correct?h("span",{class:"small muted"},sub.ai.correct+" right"):null),
+        sub.pages&&sub.pages.length?h("div",{class:"thumbs"},sub.pages.map((p,i)=>h("img",{src:pageSrc(p),alt:`${subName(sub)}, page ${i+1}`,loading:"lazy"}))):null,
+        sub.error?h("div",{class:"notice small"},sub.error):null,
+        !compact&&fbOf(sub)?h("div",{class:"feedback"},fbOf(sub)):null,
+        !compact?itemsView(sub,math,false):null,
+        h("div",{class:"row"},whoseBtn(sub,a),
+          (sub.ai)?printBtn(()=>studentPdf([S.submissions[sub.id]],`${sub.label||"Paper"} - ${a.title}`,{pages:true}),"Print"):null,
+          (sub.status==="uploaded"||sub.status==="error")&&sub.pages&&sub.pages.length&&!busy?h("button",{class:"btn",onclick:()=>{if(canClaude(true)) regradeUnnamed(sub.id)}},"Grade"):null,
+          confirmBtn("delU"+sub.id,"Delete",()=>deleteSub(sub))));
+    })));
+}
+async function regradeUnnamed(key){
+  const sub=S.submissions[key]; if(!sub) return; setBusy(key,"Loading pages…");
+  try{ const blobs=[]; for(const p of sub.pages){ const r=await fetch(pageSrc(p)); if(r.ok) blobs.push(await r.blob()); } await gradeIt(key,blobs,""); }
+  catch(e){ setBusy(key,null); toast("Couldn't load the saved pages."); }
+}
 /* ---------------- Gradebook (quick manual) ---------------- */
 function viewGradebook(){
   const g=S.gb; const list=flat(g.grade,g.subj); if(!list.find(x=>x[0]===g.code)) g.code=list[0][0];
@@ -1369,6 +1423,7 @@ function viewWork(){
   const sortName=SORTS.find(x=>x[0]===w.sort)[1];
   return [
     h("h2",null,"Student work"),
+    unnamedCard(a,true),
     h("div",{class:"card"},
       h("div",{class:"grid2"},
         h("label",{class:"f"},"Assignment",h("select",{id:"workA",onchange:e=>{w.aid=e.target.value;draw()}},list.map(x=>h("option",{value:x.id,selected:x.id===a.id},`${x.title} · ${gradeLabel(x)} ${SUBJ[x.subj]}`)))),
@@ -1476,8 +1531,8 @@ function fbOf(sub){ return sub.feedback!=null?sub.feedback:((sub.ai&&sub.ai.feed
 async function studentPdf(subs,fname,opts){
   opts=opts||{};
   
-  subs=subs.filter(s=>s&&S.assignments[s.assignmentId]&&S.students[s.studentId]);
-  if(!opts.keepOrder) subs.sort((x,y)=>S.students[x.studentId].name.localeCompare(S.students[y.studentId].name));
+  subs=subs.filter(s=>s&&S.assignments[s.assignmentId]&&(S.students[s.studentId]||s.unnamed));
+  if(!opts.keepOrder) subs.sort((x,y)=>subName(x).localeCompare(subName(y)));
   if(!subs.length){toast("No graded papers to print yet.");return}
   try{
     toast("Building PDF…");
@@ -1488,7 +1543,7 @@ async function studentPdf(subs,fname,opts){
     const SC={1:[192,72,42],2:[185,129,18],3:[46,138,85],4:[45,99,180]}; const T=teacherName();
     for(let si=0;si<subs.length;si++){ const sub=subs[si];
       if(opts.pages&&subs.length>1) toast(`Building PDF… ${si+1} of ${subs.length}`);
-      const a=S.assignments[sub.assignmentId], st=S.students[sub.studentId];
+      const a=S.assignments[sub.assignmentId], st=S.students[sub.studentId]||{name:sub.label||"Unnamed paper",grade:gradesOf(S.assignments[sub.assignmentId])[0]};
       if(si) doc.addPage();
       let y=0; const need=n=>{ if(y+n>H-50){ doc.addPage(); y=50; } };
       const sub0Cursor=()=>({get y(){return y},set y(v){y=v}});
