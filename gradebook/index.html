@@ -392,7 +392,7 @@ function h(tag, attrs, ...kids){
 const $=id=>document.getElementById(id);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const fmtDate=t=>t?new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}):"";
-let toastT; function toast(msg){document.querySelectorAll(".toast").forEach(e=>e.remove());const t=h("div",{class:"toast",role:"status"},msg);document.body.append(t);clearTimeout(toastT);toastT=setTimeout(()=>t.remove(),3200)}
+let toastT, toastHold=0; function toast(msg,hold){if(!hold&&Date.now()<toastHold) return; if(hold) toastHold=Date.now()+hold;document.querySelectorAll(".toast").forEach(e=>e.remove());const t=h("div",{class:"toast",role:"status"},msg);document.body.append(t);clearTimeout(toastT);toastT=setTimeout(()=>t.remove(),3200)}
 const badge=v=>h("span",{class:"badge b"+(v||0),title:v?LEVELS[v]:"Not graded"},v||"–");
 const byName=(a,b)=>a.name.localeCompare(b.name);
 
@@ -634,7 +634,8 @@ function viewAssignment(){
       h("div",{class:"small muted"},"Tap Upload work next to a student and choose every page of their assignment at once, front and back, up to 10 sheets (photos or a PDF). Blank backs are skipped. Grading starts as soon as the pages are in. Handwriting is read automatically."),
       h("div",{class:"row"},
         (()=>{const done=roster.map(st=>S.submissions[a.id+"__"+st.id]).filter(s=>s&&(s.ai||s.status==="accepted"));
-          return done.length?h("button",{class:"btn",onclick:()=>studentPdf(done,`${a.title} - student pages`)},`Print student pages (${done.length})`):null})(),
+          return done.length?h("span",{class:"row",style:"gap:8px"},printBtn(()=>studentPdf(done,`${a.title} - student pages`),`Print student pages (${done.length})`),
+            h("button",{class:"btn ghost",onclick:()=>studentPdf(done,`${a.title} - student pages`)},"Download")):null})(),
         rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Accepted ${rev.length} grade${rev.length>1?"s":""}.`)}},`Accept all ${rev.length} suggested`):null,
         confirmBtn("delA"+a.id,"Delete assignment",()=>{Object.values(S.submissions).filter(s=>s.assignmentId===a.id).forEach(deleteSub);oldAssets(a);remove("assignments",a.id);S.openA=null;}))),
     a.ws?worksheetCard(a):null,
@@ -670,7 +671,7 @@ function subRow(a,st,sub){
       if(sub.ai&&sub.ai.transcript) parts.push(h("details",null,h("summary",null,"What Claude read from the page"+(sub.ai.legibility&&sub.ai.legibility!=="clear"?` (handwriting: ${sub.ai.legibility})`:"")),h("pre",{class:"tx"},sub.ai.transcript)));
       const row=h("div",{class:"row"});
       if(sub.status!=="accepted") row.append(h("button",{class:"btn primary",onclick:()=>{acceptSub(sub);toast("Grade saved to "+st.name+"'s record.")}},"Accept grade"));
-      if(sub.ai||sub.status==="accepted") row.append(h("button",{class:"btn",onclick:()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`)},"Student PDF"));
+      if(sub.ai||sub.status==="accepted") row.append(printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print")); row.append(h("button",{class:"btn ghost",onclick:()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`)},"Student PDF"));
       if(CAP.sample&&sub.pages&&sub.pages.length&&!busy) row.append(h("button",{class:"btn ghost",onclick:()=>regrade(a.id,st.id)},sub.status==="uploaded"||sub.status==="error"?"Grade with Claude":"Regrade"));
       parts.push(row);
     }
@@ -1009,7 +1010,7 @@ function answerCard(a){
     if(a.versions) c.append(tierTabs(tab,l=>{S.keyTab={...(S.keyTab||{}),[a.id]:l};draw()}));
     c.append(keyTable(v.key,a.id,a.versions?tab:null));
     if(a.pages&&a.pages.length) c.append(h("div",{class:"thumbs"},a.pages.map((p,i)=>h("img",{src:pageSrc(p),alt:`Assignment page ${i+1}`,loading:"lazy"}))));
-    c.append(h("div",{class:"row"},h("button",{class:"btn",onclick:()=>keyPdf(a)},a.versions?"Download answer sheets PDF (all 3)":"Download answer sheet PDF"),
+    c.append(h("div",{class:"row"},printBtn(()=>keyPdf(a),a.versions?"Print answer sheets":"Print answer sheet"),h("button",{class:"btn",onclick:()=>keyPdf(a)},a.versions?"Download answer sheets PDF (all 3)":"Download answer sheet PDF"),
       upBtns({mode:"blank",aid:a.id},"Rebuild from a file","Scan the blank assignment",{needsClaude:true,scanLabel:"Rebuild from a new scan"})));
   } else {
     c.append(h("div",{class:"small muted"},"Optional. Upload the scanned blank assignment (up to 10 sheets, front and back) to get an answer sheet to grade against. Without one, papers are still graded and the answers are worked out automatically."),
@@ -1046,7 +1047,7 @@ async function keyPdf(a){
     }
     });
     if(a.notes){ need(30); doc.setFont("helvetica","normal"); doc.setTextColor(23,32,28); drawRich(doc,"Look-fors: "+a.notes,M,cur,TW,9.5,math,need); }
-    await saveFile({filename:`Answer sheet - ${a.title.replace(/[^\w ,.-]+/g,"").slice(0,80)}.pdf`,data:doc.output("blob")});
+    await outPdf(doc,`Answer sheet - ${a.title.replace(/[^\w ,.-]+/g,"").slice(0,80)}.pdf`);
     toast("Answer sheet saved.");
   }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't save the answer sheet. Try again."); }
 }
@@ -1208,7 +1209,7 @@ function drawViewer(){
       h("div",{class:"tbl"},h("table",null,h("thead",null,h("tr",null,h("th",null,"Standard"),h("th",null,"Score"),h("th",null,"Evidence"))),
         h("tbody",null,codesFor(a,st).map(c=>h("tr",null,h("td",null,h("span",{class:"code"},c)),h("td",null,badge((s.scores||{})[c])," ",(s.scores||{})[c]?LEVELS[s.scores[c]]:"Not scored"),h("td",{class:"small"},(s.ai&&s.ai.reasons&&s.ai.reasons[c])||"")))))),
       fbOf(s)?h("div",{class:"feedback"},h("b",null,`Feedback from ${teacherName()}: `),fbOf(s)):null,
-      h("div",null,h("button",{class:"btn",onclick:()=>studentPdf([s],`${st.name} - ${a.title}`)},"Student PDF")),
+      h("div",{class:"row"},printBtn(()=>studentPdf([s],`${st.name} - ${a.title}`),"Print"),h("button",{class:"btn",onclick:()=>studentPdf([s],`${st.name} - ${a.title}`)},"Student PDF")),
       s.ai&&s.ai.transcript?h("details",null,h("summary",null,"Transcribed work"),h("pre",{class:"tx"},s.ai.transcript)):null,
       s.text?h("details",null,h("summary",null,"Typed submission"),h("pre",{class:"tx"},s.text)):null,
       (s.pages||[]).map((p,i)=>h("img",{class:"page",src:pageSrc(p),alt:`Page ${i+1}`,loading:"lazy"})),
@@ -1306,7 +1307,7 @@ async function studentPdf(subs,fname){
       }
     });
     const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(140,150,145);doc.text(`Page ${i} of ${n}`,W-M,H-24,{align:"right"})}
-    await saveFile({filename:`${fname.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`,data:doc.output("blob")});
+    await outPdf(doc,`${fname.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`);
     toast("PDF saved.");
   }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the PDF. Check your connection and try again."); }
 }
@@ -1391,8 +1392,10 @@ function worksheetCard(a){
     a.versions?tierTabs(tab,l=>{S.wsTab={...(S.wsTab||{}),[a.id]:l};draw()}):null,
     wsPreview(v.ws,false,a.subj==="math"),
     h("div",{class:"row"},
-      h("button",{class:"btn",onclick:()=>wsPdf(a,[{lvl:tab,name:""}],`${a.title} - ${a.versions?TIER[tab].label:"worksheet"}`)},a.versions?`Download ${TIER[tab].label} PDF`:"Download worksheet PDF"),
-      roster.length?h("button",{class:"btn primary",onclick:()=>wsPdf(a,roster.map(s=>({lvl:a.versions?lvlOf(s):"avg",name:s.name})),`${a.title} - class set`)},`Print class set (${roster.length}, names filled in)`):null));
+      roster.length?printBtn(()=>wsPdf(a,roster.map(s=>({lvl:a.versions?lvlOf(s):"avg",name:s.name})),`${a.title} - class set`),`Print class set (${roster.length}, names filled in)`,"primary"):null,
+      roster.length?h("button",{class:"btn",onclick:()=>wsPdf(a,roster.map(s=>({lvl:a.versions?lvlOf(s):"avg",name:s.name})),`${a.title} - class set`)},"Download class set"):null,
+      printBtn(()=>wsPdf(a,[{lvl:tab,name:""}],`${a.title} - ${a.versions?TIER[tab].label:"worksheet"}`),a.versions?`Print ${TIER[tab].label} copy`:"Print one copy"),
+      h("button",{class:"btn ghost",onclick:()=>wsPdf(a,[{lvl:tab,name:""}],`${a.title} - ${a.versions?TIER[tab].label:"worksheet"}`)},a.versions?`Download ${TIER[tab].label} PDF`:"Download worksheet PDF")));
 }
 function drawWorksheet(doc,a,ws,form,name){
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=54, TW=W-2*M; const math=a.subj==="math";
@@ -1447,7 +1450,7 @@ async function wsPdf(a,copies,fname){
     for(let k=0;k<copies.length;k++){ const first=starts[k], last=starts[k+1]-1, tot=last-first+1;
       for(let p=first;p<=last;p++){ doc.setPage(p); doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(140,150,145);
         doc.text(`${copies[k].name?copies[k].name+"  ·  ":""}Page ${p-first+1} of ${tot}`,W-54,H-24,{align:"right"}); } }
-    await saveFile({filename:`${fname.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`,data:doc.output("blob")});
+    await outPdf(doc,`${fname.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`);
     toast("Worksheet saved.");
   }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the worksheet PDF. Try again."); }
 }
@@ -1543,7 +1546,7 @@ function customDetail(c){
       h("label",{class:"f"},"Your draft",h("textarea",{id:"cBody-"+c.id,style:"min-height:420px;line-height:1.55",onchange:e=>put("custom",c.id,{...S.custom[c.id],body:e.target.value,updated:Date.now()})},c.body)),
       h("div",{class:"small muted"},"Lines starting with ## are section headings."),
       h("div",{class:"row"},
-        h("button",{class:"btn primary",onclick:()=>customPdf(S.custom[c.id])},"Download PDF"),
+        printBtn(()=>customPdf(S.custom[c.id]),"Print","primary"),h("button",{class:"btn",onclick:()=>customPdf(S.custom[c.id])},"Download PDF"),
         h("button",{class:"btn",onclick:async e=>{const t=S.custom[c.id].body.replace(/^##\s+/gm,""); try{await navigator.clipboard.writeText(t);toast("Copied. Paste it into Word or Google Docs.")}catch(err){const ta=$("cBody-"+c.id);ta.focus();ta.select();toast("Text selected. Copy it with your keyboard.")}}},"Copy text"),
         confirmBtn("delC"+c.id,"Delete",()=>{oldAssets({pages:c.rubricPages});remove("custom",c.id);S.openC=null;}))),
     h("div",{class:"card"},h("h3",null,"Ask for changes"),
@@ -1593,7 +1596,7 @@ async function customPdf(c){
       cur.y+=8;
     }
     const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont("times","normal");doc.setFontSize(10);doc.setTextColor(110,110,110);doc.text(String(i),W/2,H-36,{align:"center"})}
-    await saveFile({filename:`${c.title.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`,data:doc.output("blob")});
+    await outPdf(doc,`${c.title.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`);
     toast("PDF saved.");
   }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the PDF. Try again."); }
 }
@@ -1653,6 +1656,24 @@ async function exportXlsx(){
     toast("Spreadsheet saved.");
   }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the spreadsheet. Check your connection and try again."); }
 }
+/* Printing: the same PDFs, sent to the printer. Outside Claude the print dialog opens right away;
+   inside Claude (where pages can't open the print dialog) the PDF is saved set to print as soon as it opens. */
+let PRINTING=false;
+async function printIt(fn){ PRINTING=true; try{ await fn(); } finally{ PRINTING=false; } }
+async function outPdf(doc,filename){
+  if(!PRINTING) return saveFile({filename,data:doc.output("blob")});
+  PRINTING=false; doc.autoPrint();
+  if(!CAP.downloads){
+    const url=URL.createObjectURL(doc.output("blob"));
+    const f=document.createElement("iframe"); f.title="Print"; f.style.cssText="position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0";
+    f.onload=()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){ window.open(url,"_blank"); } };
+    f.src=url; document.body.append(f); setTimeout(()=>{f.remove();URL.revokeObjectURL(url)},120000);
+    toast("Opening the print dialog…",4000); return {status:"printed"};
+  }
+  const r=await saveFile({filename,data:doc.output("blob")});
+  toast("Saved. Open the PDF and the print dialog comes up automatically.",5000); return r;
+}
+function printBtn(fn,label,cls){ return h("button",{class:"btn"+(cls?" "+cls:""),onclick:()=>printIt(fn)},label||"Print"); }
 /* ---------------- Reports + PDF ---------------- */
 function subjAvg(st,g,k){const v=flat(g,k).map(([c])=>(st.scores||{})[c]).filter(Boolean); return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null}
 function viewReports(){
@@ -1664,7 +1685,8 @@ function viewReports(){
         h("label",{class:"f"},"Grade",h("select",{id:"repG",onchange:e=>{r.grade=e.target.value;r.student="all";draw()}},[["all","Grades 4 and 5"],["4","Grade 4"],["5","Grade 5"]].map(([v,l])=>h("option",{value:v,selected:r.grade==v},l)))),
         h("label",{class:"f"},"Student",h("select",{id:"repS",onchange:e=>{r.student=e.target.value;draw()}},h("option",{value:"all"},"Every student (one page each)"),pool.map(s=>h("option",{value:s.id,selected:s.id===r.student},s.name))))),
       h("label",{class:"row small"},h("input",{type:"checkbox",id:"repU",checked:r.ungraded,onchange:e=>{r.ungraded=e.target.checked}}),"Include standards that haven't been scored yet"),
-      h("div",{class:"row"},h("button",{class:"btn primary",disabled:!chosen.length,onclick:()=>makePdf(chosen)},`Download PDF (${chosen.length} student${chosen.length===1?"":"s"})`)),
+      h("div",{class:"row"},h("button",{class:"btn primary",disabled:!chosen.length,onclick:()=>printIt(()=>makePdf(chosen))},`Print reports (${chosen.length} student${chosen.length===1?"":"s"})`),
+        h("button",{class:"btn",disabled:!chosen.length,onclick:()=>makePdf(chosen)},"Download PDF")),
       h("div",{class:"row"},h("button",{class:"btn",disabled:!students().length,onclick:exportXlsx},"Export to spreadsheet (.xlsx)"),
         h("span",{class:"small muted"},"Every student, score, assignment and feedback note, as a backup you keep.")),
       null),
@@ -1714,7 +1736,7 @@ async function makePdf(list){
     });
     const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(140,150,145);doc.text(`Page ${i} of ${n}`,W-40,doc.internal.pageSize.getHeight()-24,{align:"right"})}
     const name=list.length===1?`${list[0].name.replace(/[^\w ]+/g,"")} standards report.pdf`:`Standards reports ${new Date().toISOString().slice(0,10)}.pdf`;
-    await saveFile({filename:name,data:doc.output("blob")});
+    await outPdf(doc,name);
     toast("PDF saved.");
   }catch(e){
     if(e&&e.code==="declined") return;
