@@ -576,6 +576,15 @@ function gradePill(a,st,sub){
     h("span",{class:"small muted"},"Calculated grade"),
     h("span",{class:"badge b"+g.lvl,"aria-label":`Calculated grade ${g.lvl}`},g.lvl));
 }
+/* Previous / next student buttons for the graph and paper views. */
+function stepper(list,cur,go,noun){
+  const i=list.indexOf(cur); if(i<0||list.length<2) return null;
+  const prev=list[(i-1+list.length)%list.length], next=list[(i+1)%list.length];
+  return h("div",{class:"row spread",style:"gap:8px;flex-wrap:nowrap"},
+    h("button",{class:"btn","aria-label":`Previous ${noun}`,onclick:()=>go(prev)},"‹ Previous"),
+    h("span",{class:"small muted",style:"white-space:nowrap"},`${i+1} of ${list.length}`),
+    h("button",{class:"btn primary","aria-label":`Next ${noun}`,onclick:()=>go(next)},"Next student ›"));
+}
 /* ---------------- one student's graphs ---------------- */
 function studentData(sid){
   const st=S.students[sid];
@@ -606,6 +615,7 @@ function drawStudentGraph(){
   const chart=h("div",{class:"chart"}); if(d.pts.length) chart.innerHTML=lineChartSvg(d.pts);
   const ov=h("div",{class:"overlay sgraph",onclick:e=>{if(e.target===ov) close()}},
     h("div",{class:"sheet",role:"dialog","aria-label":`${st.name}'s graphs`},
+      stepper(students().map(x=>x.id),sid,id=>{S.graphFor=id;draw();const o=document.querySelector(".overlay.sgraph");if(o)o.scrollTop=0},"student"),
       h("div",{class:"row spread"},h("div",null,h("h2",null,st.name),h("div",{class:"small muted"},`Grade ${st.grade}${(st.level&&st.level!=="avg")?` · ${TIER[lvlOf(st)].label}`:""} · ${d.pts.length} graded assignment${d.pts.length===1?"":"s"}`)),h("button",{class:"btn ghost",onclick:close},"Close")),
       h("div",{class:"chart"},h("h4",null,"Calculated grade on each assignment"),
         d.pts.length?[chart,
@@ -1820,6 +1830,7 @@ function drawViewer(){
   const close=()=>{S.viewSub=null;draw()};
   const ov=h("div",{class:"overlay",onclick:e=>{if(e.target===ov) close()}},
     h("div",{class:"sheet",role:"dialog","aria-label":`${st.name}: ${a.title}`},
+      stepper(students(gradesOf(a)).map(x=>a.id+"__"+x.id).filter(k=>S.submissions[k]),s.id,k=>{S.viewSub=k;draw();const o=document.querySelector(".overlay");if(o)o.scrollTop=0},"student's paper"),
       h("div",{class:"row spread"},h("div",null,h("h2",null,st.name),h("div",{class:"small muted"},`${a.title} · ${gradeLabel(a)} ${SUBJ[a.subj]} · submitted ${fmtDate(s.submittedAt)}${s.acceptedAt?" · graded "+fmtDate(s.acceptedAt):""}`)),h("button",{class:"btn",onclick:close},"Close")),
       h("div",{class:"tbl"},h("table",null,h("thead",null,h("tr",null,h("th",null,"Standard"),h("th",null,"Score"),h("th",null,"Evidence"))),
         h("tbody",null,codesFor(a,st).map(c=>h("tr",null,h("td",null,h("span",{class:"code"},c)),h("td",null,badge((s.scores||{})[c])," ",(s.scores||{})[c]?LEVELS[s.scores[c]]:"Not scored"),h("td",{class:"small"},(s.ai&&s.ai.reasons&&s.ai.reasons[c])||"")))))),
@@ -1833,7 +1844,10 @@ function drawViewer(){
         confirmBtn("delS"+s.id,"Delete this submission",()=>{deleteSub(s);S.viewSub=null}))));
   document.body.append(ov);
 }
-document.addEventListener("keydown",e=>{if(e.key!=="Escape") return; if(S.graphFor){S.graphFor=null;draw()} else if(S.keyView){S.keyView=null;draw()} else if(S.viewSub){S.viewSub=null;draw()}});
+document.addEventListener("keydown",e=>{
+  if((e.key==="ArrowRight"||e.key==="ArrowLeft")&&(S.graphFor||S.viewSub)&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||"")){
+    const btn=[...document.querySelectorAll('.overlay button[aria-label^="'+(e.key==="ArrowRight"?"Next":"Previous")+'"]')].pop(); if(btn){ e.preventDefault(); btn.click(); } return; }
+  if(e.key!=="Escape") return; if(S.graphFor){S.graphFor=null;draw()} else if(S.keyView){S.keyView=null;draw()} else if(S.viewSub){S.viewSub=null;draw()}});
 
 /* ---------------- Class ---------------- */
 let addG=4, addTxt="";
