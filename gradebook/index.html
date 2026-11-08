@@ -714,7 +714,8 @@ function gradeResults(a){
     !rows.length?h("div",{class:"small muted"},"Grades show up here as each paper is finished."):null,
     rows.length?h("div",{class:"row"},
       rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Saved ${rev.length} grade${rev.length>1?"s":""} to the gradebook.`)}},`Accept all ${rev.length} grade${rev.length>1?"s":""}`):null,
-      done.length?printBtn(()=>studentPdf(done,`${a.title} - graded papers`,{pages:true}),`Print all (${done.length}) with feedback`):null,
+      done.length?printBtn(()=>studentPdf(done,`${a.title} - graded papers`,{pages:true}),`Print all (${done.length}) with work`):null,
+      done.length?printBtn(()=>studentPdf(done,`${a.title} - grades and feedback`),`Print all without work`):null,
       h("button",{class:"btn ghost",onclick:()=>{S.keyView=a.id;draw()}},"Answer key")):null,
     rows.length?h("div",{class:"list"},rows.map(({st,sub})=>{
       const key=a.id+"__"+st.id, busy=S.busy[key];
@@ -730,7 +731,8 @@ function gradeResults(a){
         itemsView(sub,math,false),
         h("div",{class:"row"},
           sub.status==="review"?h("button",{class:"btn",onclick:()=>{acceptSub(sub);toast(`Saved ${st.name}'s grade.`)}},"Accept"):null,
-          (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print"):null,
+          (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
+          (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
           h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change scores")));
     })):null);
 }
@@ -1571,7 +1573,8 @@ function unnamedCard(a,compact){
         !compact&&fbOf(sub)?h("div",{class:"feedback"},fbOf(sub)):null,
         !compact?itemsView(sub,math,false):null,
         h("div",{class:"row"},whoseBtn(sub,a),
-          (sub.ai)?printBtn(()=>studentPdf([S.submissions[sub.id]],`${sub.label||"Paper"} - ${a.title}`,{pages:true}),"Print"):null,
+          (sub.ai)?printBtn(()=>studentPdf([S.submissions[sub.id]],`${sub.label||"Paper"} - ${a.title}`,{pages:true}),"Print with work"):null,
+          (sub.ai)?printBtn(()=>studentPdf([S.submissions[sub.id]],`${sub.label||"Paper"} - ${a.title}`),"Print without work"):null,
           (sub.status==="uploaded"||sub.status==="error")&&sub.pages&&sub.pages.length&&!busy?h("button",{class:"btn",onclick:()=>{if(canClaude(true)) regradeUnnamed(sub.id)}},"Grade"):null,
           confirmBtn("delU"+sub.id,"Delete",()=>deleteSub(sub))));
     })));
@@ -1643,9 +1646,10 @@ function viewWork(){
         rows.length-turned.length?h("span",{class:"pill rev"},`${rows.length-turned.length} missing`):null,
         classAvg!=null?h("span",{class:"pill ok"},`Class average ${classAvg.toFixed(1)}`):null),
       h("div",{class:"row"},
-        printBtn(()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true}),`Print all (${printable.length}) with work, grades and feedback`,"primary"),
-        h("button",{class:"btn",onclick:()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true})},"Download PDF")),
-      h("div",{class:"small muted"},"Prints in the order shown: each student's grades and your feedback, followed by their scanned pages.")),
+        printBtn(()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true}),`Print all (${printable.length}) with work`,"primary"),
+        printBtn(()=>studentPdf(printable,`${a.title} - grades and feedback (${sortName})`,{keepOrder:true}),`Print all without work`),
+        h("button",{class:"btn ghost",onclick:()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true})},"Download PDF")),
+      h("div",{class:"small muted"},"Prints in the order shown. With work adds each student's scanned pages after their grades and feedback; without work prints just the grades and feedback.")),
     classResults(a),
     shown.length?h("div",{class:"list"},shown.map(({st,sub,avg})=>{
       const key=a.id+"__"+st.id;
@@ -1662,6 +1666,7 @@ function viewWork(){
         (sub.ai||sub.status==="accepted")?h("label",{class:"f"},`Feedback from ${teacherName()}`,h("textarea",{id:"wfb-"+key,style:"min-height:60px",onchange:e=>put("submissions",key,{...S.submissions[key],feedback:e.target.value})},fbOf(sub))):null,
         h("div",{class:"row"},
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
+          (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
           h("button",{class:"btn ghost",onclick:()=>{S.viewSub=key;draw()}},"View pages"),
           h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change grade")));
     })):h("div",{class:"card empty"},"No work turned in yet for this assignment.")
