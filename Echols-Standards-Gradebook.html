@@ -809,7 +809,7 @@ function viewGrade(){
       h("button",{class:"btn primary",onclick:()=>a?startOld(false):startNew(false)},"Upload papers")),
     h("div",{class:"small muted"},"Scan with your phone or tablet camera, or upload a PDF from the copier. Grading starts as soon as the papers are in. Keep this page open while it grades; if it stops, it picks up where it left off next time you open the gradebook."),
     a&&a.stackNote?h("div",{class:"notice small"},a.stackNote):null));
-  if(a){ out.push(gradeResults(a)); const u=unnamedCard(a,false); if(u) out.push(u); const cr=classResults(a); if(cr) out.push(cr); }
+  if(a){ const mn=missingNotice(a); if(mn) out.push(mn); out.push(gradeResults(a)); const u=unnamedCard(a,false); if(u) out.push(u); const cr=classResults(a); if(cr) out.push(cr); }
   return out;
 }
 function gradeResults(a){
@@ -1006,6 +1006,7 @@ function viewAssignment(){
       h("div",{class:"row spread"},h("h2",null,a.title),h("span",{class:"pill"},`${gradeLabel(a)} · ${SUBJ[a.subj]}`)),
       gsEditor(a),
       stdEditor(a),
+      missingNotice(a),
       a.needsRegrade?h("div",{class:"notice row spread"},h("span",null,"Standards changed. Regrade the uploaded papers to score the new standards."),
         CAP.sample?h("button",{class:"btn",onclick:()=>regradeAll(a.id)},"Regrade all papers"):null):null,
       a.notes?h("div",{class:"small"},h("b",null,"Answer key / look-fors: "),a.notes):null,
@@ -1039,6 +1040,8 @@ function subRow(a,st,sub){
   if(sub){
     if(sub.pages&&sub.pages.length) parts.push(h("div",{class:"thumbs"},sub.pages.map(p=>h("img",{src:pageSrc(p),alt:"Page of "+st.name+"'s work",loading:"lazy",onclick:()=>{S.viewSub=key;draw()}}))));
     if(sub.error) parts.push(h("div",{class:"notice"},sub.error));
+    { const miss=(sub.ai||sub.status==="accepted")&&!busy?missingCodes(sub):[]; if(miss.length) parts.push(h("div",{class:"notice small row spread"},h("span",null,`Not scored yet: ${miss.join(", ")}. Tap a score below, or let it be scored.`),
+      h("button",{class:"btn",onclick:()=>{if(canClaude(false)) scoreMissing(key)}},"Score these"))); }
     if(sub.status==="review"||sub.status==="accepted"||sub.status==="uploaded"||sub.status==="error"){
       parts.push(h("div",{class:"stdline"},codesFor(a,st).map(c=>{
         const v=(sub.scores||{})[c], sug=sub.ai&&sub.ai.scores?sub.ai.scores[c]:null;
@@ -1276,10 +1279,10 @@ async function gradeIt(key,blobs,text){
     `Grade level: ${stG}. Core subject: ${SUBJ[a.subj]}. Assignment: "${a.title}".`, keyText(a,lvlOf(S.students[sub.studentId]))].join("\n\n");
   const auto=!myCodes.length;
   const rubric=[auto?`No standards have been assigned to this assignment yet. First choose the 1–4 NC standards it best assesses, using ONLY codes from this list (prefer ${SUBJ[a.subj]}):\n${candidateList(stG)}\nThen score the student on exactly those codes.`
-      :`Standards to score:\n${myCodes.map(c=>`- ${c}: ${STDTEXT[c]}`).join("\n")}\nWhere the answer sheet tags a question with a standard, base that standard's score on those questions.`,
+      :`Standards to score:\n${myCodes.map(c=>`- ${c}: ${STDTEXT[c]}`).join("\n")}\nQuestions tagged with a standard on the answer sheet are the main evidence for it, but EVERY standard listed here must get a whole-number score from 1 to 4, using evidence from anywhere in the student's work. For example, capitalization, punctuation and spelling in any written answer count toward conventions standards, and word choice counts toward language and vocabulary standards. Never leave a standard unscored just because no question is tagged to it.`,
     `Scale (score each standard separately, whole numbers only):\n4 = ${LEVEL_DESC[4]}\n3 = ${LEVEL_DESC[3]}\n2 = ${LEVEL_DESC[2]}\n1 = ${LEVEL_DESC[1]}`,
-    `Judge the whole assignment across all pages. Compare each answer with the answer sheet. If the work shows no evidence for a standard, use null for that standard.`].join("\n\n");
-  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4 or null}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name (only if a name is written on the paper; otherwise use no name): one strength, one next step. Never mention AI, Claude, or automated grading.", "items": [{"n": "question number", "right": true, "student": "what the student answered, short", "answer": "the correct answer (only when wrong)", "note": "if right: a short, specific bit of praise naming what they did well; if wrong: kindly explain the mistake and how to fix it, in words a 9–11 year old understands"}]}
+    `Judge the whole assignment across all pages. Compare each answer with the answer sheet. Give every listed standard a score of 1, 2, 3 or 4.`].join("\n\n");
+  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name (only if a name is written on the paper; otherwise use no name): one strength, one next step. Never mention AI, Claude, or automated grading.", "items": [{"n": "question number", "right": true, "student": "what the student answered, short", "answer": "the correct answer (only when wrong)", "note": "if right: a short, specific bit of praise naming what they did well; if wrong: kindly explain the mistake and how to fix it, in words a 9–11 year old understands"}]}
 Include one entry in "items" for every question, in order. Feedback notes speak to the student as ${teacherName()} would and never mention AI.`;
   try{
     let r, transcript="", legibility="";
@@ -1327,10 +1330,45 @@ Include one entry in "items" for every question, in order. Feedback notes speak 
     const corr=String(r&&r.correct||"")||(items.length?`${items.filter(x=>x.right).length} of ${items.length}`:"");
     const ai={scores,reasons,items,transcript:transcript.slice(0,12000),feedback:String(r&&r.feedback||"").slice(0,600),correct:corr.slice(0,40),legibility,pagesRead:blobs.length,gradedAt:Date.now()};
     put("submissions",key,{...S.submissions[key],ai,scores:{...scores},status:"review",error:""});
+    if(codes.some(c=>!scores[c])) await scoreMissing(key);
   }catch(e){
     if(e&&(e.code==="not_granted"||e.code==="sampling_disabled")) CAP.sample=null;
     put("submissions",key,{...S.submissions[key],status:"error",error:errMsg(e,"Grading didn't finish. Tap Grade to try again.")});
   }finally{ setBusy(key,null); }
+}
+/* Scores any chosen standard a paper is still missing, from the work already read (no re-scan needed). */
+function missingCodes(sub){ const a=S.assignments[sub.assignmentId]; if(!a) return []; const stu=S.students[sub.studentId]||{grade:gradesOf(a)[0]}; return codesFor(a,stu).filter(c=>!(sub.scores||{})[c]); }
+async function scoreMissing(key){
+  const sub=S.submissions[key]; if(!sub) return; const a=S.assignments[sub.assignmentId]; const miss=missingCodes(sub); if(!miss.length) return;
+  const stu=S.students[sub.studentId]||{}; const stG=Number(stu.grade)||gradesOf(a)[0];
+  const work=[(sub.ai&&sub.ai.transcript)||"",(sub.text||""),(sub.ai&&sub.ai.items||[]).map(x=>`${x.n}. ${x.right?"right":"wrong"}${x.student?` (wrote: ${x.student})`:""}`).join("\n")].filter(Boolean).join("\n\n");
+  if(!work.trim()){ if(sub.pages&&sub.pages.length&&!sub.unnamed) return regrade(sub.assignmentId,sub.studentId); return; }
+  setBusy(key,`Scoring ${miss.join(", ")}…`);
+  try{
+    const r=await sampleJson([`You are helping a North Carolina teacher finish grading one grade ${stG} student's ${SUBJ[a.subj]} assignment, "${a.title}".`,
+      keyText(a,lvlOf(S.students[sub.studentId])),
+      `The student's work, already read from their paper:\n"""\n${work.slice(0,25000)}\n"""`,
+      `Score each of these standards with a whole number 1–4, using evidence from anywhere in the work. For example, capitalization, punctuation and spelling in any written answer count toward conventions standards.\n${miss.map(c=>`- ${c}: ${STDTEXT[c]}`).join("\n")}`,
+      `Scale:\n4 = ${LEVEL_DESC[4]}\n3 = ${LEVEL_DESC[3]}\n2 = ${LEVEL_DESC[2]}\n1 = ${LEVEL_DESC[1]}`,
+      `Reply with only this JSON object: {"scores": {"<code>": 1-4}, "reasons": {"<code>": "one sentence citing specific evidence from the work"}}`].join("\n\n"),{modelTier:"default"});
+    const cur=S.submissions[key]; const sc={...(cur.scores||{})}, ai={...(cur.ai||{})}; const rs={...(ai.reasons||{})}, ais={...(ai.scores||{})};
+    for(const c of miss){ const v=Math.round(Number(r&&r.scores?r.scores[c]:NaN)); if(v>=1&&v<=4){ sc[c]=v; ais[c]=v; if(r.reasons&&r.reasons[c]) rs[c]=String(r.reasons[c]).slice(0,400); } }
+    const nx={...cur,scores:sc,ai:{...ai,scores:ais,reasons:rs}}; put("submissions",key,nx);
+    if(nx.status==="accepted") pushScores(nx);
+  }catch(e){ toast(errMsg(e,"Couldn't score the remaining standards. Try again.")); }
+  finally{ setBusy(key,null); }
+}
+async function scoreMissingAll(aid){
+  const list=Object.values(S.submissions).filter(x=>x.assignmentId===aid&&(x.ai||x.status==="accepted")&&missingCodes(x).length&&!S.busy[x.id]);
+  toast(`Scoring missing standards on ${list.length} paper${list.length>1?"s":""}…`,3000);
+  for(const x of list) await scoreMissing(x.id);
+  toast("Every chosen standard is scored. Check and accept.");
+}
+function missingNotice(a){
+  const list=Object.values(S.submissions).filter(x=>x.assignmentId===a.id&&(x.ai||x.status==="accepted")&&missingCodes(x).length);
+  if(!list.length) return null;
+  return h("div",{class:"notice row spread"},h("span",null,`${list.length} paper${list.length>1?"s are":" is"} missing a score on one or more chosen standards.`),
+    h("button",{class:"btn",onclick:()=>{if(canClaude(false)) scoreMissingAll(a.id)}},"Score missing standards"));
 }
 function deleteSub(sub){ oldAssets(sub); remove("submissions",sub.id); }
 
@@ -1366,7 +1404,7 @@ async function buildKey(files,aid){
       a?`This assignment is ${gradeLabel(a).toLowerCase()} ${SUBJ[a.subj]}, titled "${a.title}".`:"",
       `Give the correct answer for every question or task. Write fractions as numerator/denominator with no spaces (e.g. 3/4, 2 1/3). For open-ended items (explain, write, draw), state what a full-credit answer must include.`,
       `This is a ${SUBJ[subj]} assignment. Also choose the NC standards it best assesses (1–4${grades.length>1?" for each grade":""}), using ONLY codes from this list:\n${grades.map(g=>`Grade ${g}:\n`+candidateList(g,subj)).join("\n\n")}`,
-      `Reply with only this JSON object:\n{"title": "short assignment title", "subject": "ela" | "math" | "sci" | "ss", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the one code from your codes list this question assesses"}]}`].filter(Boolean).join("\n\n");
+      `Reply with only this JSON object:\n{"title": "short assignment title", "subject": "ela" | "math" | "sci" | "ss", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the one code from your codes list this question assesses"}]}\nEvery code in "codes" must be tagged on at least one question.`].filter(Boolean).join("\n\n");
     const r=await sampleJson(prompt,{images:imgs.length?imgs:undefined,modelTier:"default"});
     const answers=(Array.isArray(r&&r.answers)?r.answers:[]).slice(0,80).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),question:String(x&&x.question||"").slice(0,200),answer:String(x&&x.answer||"").slice(0,400),notes:String(x&&x.notes||"").slice(0,300),std:String(x&&x.std||"").slice(0,20)}));
     if(!answers.length) throw new Error("Claude couldn't find any questions on those pages. Try a clearer scan.");
@@ -1514,8 +1552,8 @@ async function keyFromPapers(aid,imgs){
     auto?`First decide which core subject it is: "ela", "math", "sci" or "ss".`:"",
     `The attached images are scanned pages of students' completed copies of the assignment (possibly from more than one student). Read the questions themselves and IGNORE every student answer: students make mistakes. Solve every question yourself, correctly.`,
     `Give the correct answer for every question or task. Write fractions as numerator/denominator with no spaces (e.g. 3/4, 2 1/3). For open-ended items (explain, write, draw), state what a full-credit answer must include.`,
-    a.codes.length&&!auto?`The assignment assesses: ${a.codes.join(", ")}. Tag each question with the one of these it assesses.`:`Also choose the NC standards it best assesses (1–4${grades.length>1?" for each grade":""}), using ONLY codes from this list${auto?" for the subject you chose":""}:\n${grades.map(g=>`Grade ${g}:\n`+candidateList(g,auto?null:subj)).join("\n\n")}`,
-    `Reply with only this JSON object:\n{"title": "short assignment title", "subject": "ela" | "math" | "sci" | "ss", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the standard code this question assesses"}]}`].join("\n\n"),{images:imgs,modelTier:"default"});
+    a.codes.length&&!auto?`The assignment assesses: ${a.codes.join(", ")}. Tag each question with the one of these it assesses, and make sure EVERY one of them is tagged on at least one question (pick the closest question if needed).`:`Also choose the NC standards it best assesses (1–4${grades.length>1?" for each grade":""}), using ONLY codes from this list${auto?" for the subject you chose":""}:\n${grades.map(g=>`Grade ${g}:\n`+candidateList(g,auto?null:subj)).join("\n\n")}`,
+    `Reply with only this JSON object:\n{"title": "short assignment title", "subject": "ela" | "math" | "sci" | "ss", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the standard code this question assesses"}]}\nEvery code in "codes" must be tagged on at least one question.`].join("\n\n"),{images:imgs,modelTier:"default"});
   const answers=(Array.isArray(r&&r.answers)?r.answers:[]).slice(0,80).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),question:String(x&&x.question||"").slice(0,200),answer:String(x&&x.answer||"").slice(0,400),notes:String(x&&x.notes||"").slice(0,300),std:String(x&&x.std||"").slice(0,20)}));
   if(!answers.length) throw new Error("no questions");
   const cur=S.assignments[aid];
