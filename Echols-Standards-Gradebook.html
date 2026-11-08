@@ -145,6 +145,7 @@ pre.tx{white-space:pre-wrap;font:400 .88rem/1.5 var(--f-body);background:var(--s
 </header>
 <main><div class="wrap" id="main"></div></main>
 <input type="file" id="filePick" multiple accept="image/*,application/pdf,.pdf,.txt" hidden>
+<input type="file" id="camPick" accept="image/*" capture="environment" hidden>
 
 <script>
 /* ---------------- NC standards (objective level) ---------------- */
@@ -444,7 +445,9 @@ function draw(){
   const m=$("main"); const y=scrollY;
   const v={assign:S.openA?viewAssignment:viewAssignments,gb:viewGradebook,arch:viewArchive,class:viewClass,rep:viewReports,custom:viewCustom}[S.tab]();
   m.replaceChildren(...[].concat(v));
-  if(S.viewSub) drawViewer(); else document.querySelectorAll(".overlay").forEach(o=>o.remove());
+  document.querySelectorAll(".overlay").forEach(o=>o.remove());
+  if(S.viewSub) drawViewer();
+  if(S.scan) drawScanner();
   scrollTo(0,y);
 }
 const students=g=>Object.values(S.students).filter(s=>g==null||g==="all"||(Array.isArray(g)?g.includes(Number(s.grade)):s.grade==g)).sort(byName);
@@ -544,7 +547,7 @@ function newAssignmentForm(){
     draft.mode==="make"?makePanel():
     h("div",{class:"drop"},draft.busy?h("span",{class:"row",style:"justify-content:center"},h("span",{class:"spin"}),draft.busy):[
       h("div",null,"Choose the grade and core subject above first. Then upload the blank assignment as a PDF or photos, up to 10 pages. The title, standards and answer sheet are filled in for you."),
-      h("div",{style:"margin-top:10px"},h("button",{class:"btn",disabled:!CAP.sample,onclick:()=>pickMode({mode:"blank-new"})},draft.key?"Scan a different assignment":"Upload scanned assignment"))]),
+      h("div",{style:"margin-top:10px"},upBtns({mode:"blank-new"},draft.key?"Upload a different file":"Upload file","Scan the blank assignment",{disabled:!CAP.sample}))]),
     draft.key&&draft.mode==="scan"?h("div",{class:"f"},h("span",{class:"small"},h("b",null,`Answer sheet · ${draft.key.answers.length} items`)," · you can edit answers after you create the assignment"),keyTable(draft.key,null)):null,
     h("label",{class:"f"},"Assignment title",h("input",{type:"text",id:"aTitle",value:draft.title,placeholder:"e.g. Fractions exit ticket, Nov 10",oninput:e=>draft.title=e.target.value})),
     h("div",{class:"f"},h("span",{class:"small"},h("b",null,"Standards"),draft.key?" · change any you like.":" · optional. Leave blank and Claude picks them from the scan or the first paper it grades."),cl),
@@ -590,7 +593,7 @@ function subRow(a,st,sub){
   const head=h("div",{class:"subhead"},h("span",{class:"name"},st.name,a.versions?h("span",{class:"pill",style:"margin-left:8px"},TIER[lvlOf(st)].label):null),
     busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):
     sub?h("span",{class:"pill "+(sub.status==="accepted"?"ok":sub.status==="review"?"rev":"")},{accepted:"Graded",review:"Review suggestion",uploaded:"Not graded",error:"Needs attention"}[sub.status]||sub.status):h("span",{class:"pill"},"Not submitted"),
-    h("button",{class:"btn",disabled:!!busy,onclick:()=>pickFor(a.id,st.id)},sub?"Replace work":"Upload work"));
+    upBtns({mode:"student",aid:a.id,sid:st.id},sub?"Replace by upload":"Upload work",`Scan ${st.name}'s work`,{disabled:!!busy,scanLabel:sub?"Rescan":"Scan"}));
   const parts=[head];
   if(sub){
     if(sub.pages&&sub.pages.length) parts.push(h("div",{class:"thumbs"},sub.pages.map(p=>h("img",{src:pageSrc(p),alt:"Page of "+st.name+"'s work",loading:"lazy",onclick:()=>{S.viewSub=key;draw()}}))));
@@ -637,12 +640,80 @@ function pickMode(t){ S.upTarget=t; const f=$("filePick"); f.value=""; f.click()
 function pickFor(aid,sid){ pickMode({mode:"student",aid,sid}); }
 $("filePick").addEventListener("change",e=>{
   const files=[...e.target.files]; const t=S.upTarget; S.upTarget=null; if(!files.length||!t) return;
+  if(t.scanAdd){ addScanFiles(files); return; }
+  handleFiles(t,files);
+});
+function handleFiles(t,files){
   if(t.mode==="student") submitWork(t.aid,t.sid,files);
   else if(t.mode==="blank-new") buildKey(files,null);
   else if(t.mode==="blank") buildKey(files,t.aid);
   else if(t.mode==="stack") uploadStack(t.aid,files);
   else if(t.mode==="rubric") prepRubric(files).catch(e=>toast(errMsg(e,"Couldn't read that rubric file.")));
-});
+}
+
+/* ---------------- scan with the camera ---------------- */
+const SCAN_LIMIT={student:MAX_PAGES,"blank-new":MAX_PAGES,blank:MAX_PAGES,rubric:6,stack:300};
+function scanFor(t,title){ S.scan={t,title,pages:[],clean:true,busy:""}; draw(); }
+function upBtns(t,uploadLabel,scanTitle,opts){
+  opts=opts||{};
+  return h("span",{class:"row",style:"gap:8px"},
+    h("button",{class:"btn"+(opts.primary?" primary":""),disabled:!!opts.disabled,onclick:()=>scanFor(t,scanTitle)},opts.scanLabel||"Scan with camera"),
+    h("button",{class:"btn",disabled:!!opts.disabled,onclick:()=>pickMode(t)},uploadLabel));
+}
+async function enhancePage(file,clean){
+  const bmp=await createImageBitmap(file,{imageOrientation:"from-image"}).catch(()=>null);
+  if(!bmp) throw new Error("Couldn't read that photo. Try again.");
+  const k=Math.min(1,1700/Math.max(bmp.width,bmp.height));
+  const cv=document.createElement("canvas"); cv.width=Math.round(bmp.width*k); cv.height=Math.round(bmp.height*k);
+  const ctx=cv.getContext("2d"); ctx.drawImage(bmp,0,0,cv.width,cv.height);
+  if(clean){
+    /* Make a phone photo look like a scan: stretch contrast so paper turns white and pencil turns dark. */
+    const im=ctx.getImageData(0,0,cv.width,cv.height), d=im.data, hist=new Uint32Array(256);
+    for(let i=0;i<d.length;i+=16) hist[(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)|0]++;
+    let tot=0; for(const v of hist) tot+=v; let lo=0,hi=255,acc=0;
+    for(let v=0;v<256;v++){acc+=hist[v]; if(acc>tot*0.02){lo=v;break}}
+    acc=0; for(let v=255;v>=0;v--){acc+=hist[v]; if(acc>tot*0.10){hi=v;break}}
+    if(hi-lo>40){ const sc=255/(hi-lo);
+      for(let i=0;i<d.length;i+=4){ for(let c=0;c<3;c++){ let v=(d[i+c]-lo)*sc; v=v<0?0:v>255?255:v; d[i+c]=Math.pow(v/255,1.15)*255; } } }
+    ctx.putImageData(im,0,0);
+  }
+  const blob=await canvasBlob(cv); return {blob,url:URL.createObjectURL(blob)};
+}
+async function addScanFiles(files){
+  const sc=S.scan; if(!sc) return; const lim=SCAN_LIMIT[sc.t.mode]||MAX_PAGES;
+  sc.busy="Cleaning up the page…"; draw();
+  try{ for(const f of files){ if(sc.pages.length>=lim){toast(`That's the ${lim}-page limit.`);break}
+      if(f.type==="application/pdf"||/\.pdf$/i.test(f.name)){ const r=await pdfToJpegs(f,lim-sc.pages.length); for(const b of r.pages) sc.pages.push({blob:b,url:URL.createObjectURL(b)}); }
+      else sc.pages.push(await enhancePage(f,sc.clean)); } }
+  catch(e){ toast(e&&e.message?e.message:"Couldn't add that page."); }
+  sc.busy=""; draw();
+}
+$("camPick").addEventListener("change",e=>{const files=[...e.target.files]; e.target.value=""; if(files.length) addScanFiles(files);});
+function drawScanner(){
+  document.querySelectorAll(".overlay.scan").forEach(o=>o.remove());
+  const sc=S.scan; const lim=SCAN_LIMIT[sc.t.mode]||MAX_PAGES;
+  const close=()=>{sc.pages.forEach(p=>URL.revokeObjectURL(p.url)); S.scan=null; draw();};
+  const finish=()=>{ const files=sc.pages.map((p,i)=>new File([p.blob],`scan-${i+1}.jpg`,{type:"image/jpeg"})); const t=sc.t; S.scan=null; draw(); handleFiles(t,files); };
+  const ov=h("div",{class:"overlay scan"},
+    h("div",{class:"sheet",role:"dialog","aria-label":"Scan pages"},
+      h("div",{class:"row spread"},h("div",null,h("h2",null,sc.title||"Scan pages"),h("div",{class:"small muted"},`${sc.pages.length} page${sc.pages.length===1?"":"s"} · up to ${lim}`)),h("button",{class:"btn ghost",onclick:close},"Cancel")),
+      h("div",{class:"small muted"},sc.t.mode==="stack"?"Photograph each page in order. Make sure each student's name is on their first page.":"Lay the page flat in good light and fill the screen with it. Photograph the pages in order."),
+      sc.busy?h("span",{class:"pill"},h("span",{class:"spin"}),sc.busy):
+      h("div",{class:"row"},
+        h("button",{class:"btn primary",disabled:sc.pages.length>=lim,onclick:()=>{const c=$("camPick");c.value="";c.click()}},sc.pages.length?"Scan next page":"Scan first page"),
+        h("button",{class:"btn",disabled:sc.pages.length>=lim,onclick:()=>{S.upTarget={scanAdd:true};const f=$("filePick");f.value="";f.click()}},"Add from files")),
+      h("label",{class:"row small"},h("input",{type:"checkbox",id:"scanClean",checked:sc.clean,onchange:e=>{sc.clean=e.target.checked}}),"Clean up photos so they look scanned"),
+      sc.pages.length?h("div",{style:"display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px"},sc.pages.map((p,i)=>h("div",{style:"display:flex;flex-direction:column;gap:4px;min-width:0"},
+        h("img",{src:p.url,alt:`Page ${i+1}`,style:"width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:var(--sunk)"}),
+        h("div",{class:"row spread small"},h("span",null,`Page ${i+1}`),
+          h("span",{class:"row",style:"gap:2px"},
+            i>0?h("button",{class:"btn ghost",style:"min-height:30px;padding:2px 6px","aria-label":`Move page ${i+1} earlier`,onclick:()=>{[sc.pages[i-1],sc.pages[i]]=[sc.pages[i],sc.pages[i-1]];draw()}},"↑"):null,
+            h("button",{class:"btn ghost danger",style:"min-height:30px;padding:2px 6px","aria-label":`Remove page ${i+1}`,onclick:()=>{URL.revokeObjectURL(p.url);sc.pages.splice(i,1);draw()}},"✕")))))):
+        h("div",{class:"empty"},"No pages yet."),
+      h("div",{class:"row"},h("button",{class:"btn primary",disabled:!sc.pages.length||!!sc.busy,onclick:finish},
+        {student:"Done, grade this work",stack:"Done, sort and grade",blank:"Done, make the answer sheet","blank-new":"Done, make the answer sheet",rubric:"Done, use this rubric"}[sc.t.mode]||"Done"))));
+  document.body.append(ov);
+}
 
 function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`)){res();return}const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=()=>rej(new Error("Couldn't load a helper library. Check your connection."));document.head.append(s)})}
 async function ensurePdfjs(){
@@ -857,10 +928,10 @@ function answerCard(a){
     c.append(keyTable(v.key,a.id,a.versions?tab:null));
     if(a.pages&&a.pages.length) c.append(h("div",{class:"thumbs"},a.pages.map((p,i)=>h("img",{src:pageSrc(p),alt:`Assignment page ${i+1}`,loading:"lazy"}))));
     c.append(h("div",{class:"row"},h("button",{class:"btn",onclick:()=>keyPdf(a)},a.versions?"Download answer sheets PDF (all 3)":"Download answer sheet PDF"),
-      CAP.sample?h("button",{class:"btn ghost",onclick:()=>pickMode({mode:"blank",aid:a.id})},"Rebuild from a new scan"):null));
+      CAP.sample?upBtns({mode:"blank",aid:a.id},"Rebuild from a file","Scan the blank assignment",{scanLabel:"Rebuild from a new scan"}):null));
   } else {
     c.append(h("div",{class:"small muted"},"Optional. Upload the scanned blank assignment (up to 10 pages) to get an answer sheet to grade against. Without one, papers are still graded and the answers are worked out automatically."),
-      h("div",null,h("button",{class:"btn",disabled:!CAP.sample,onclick:()=>pickMode({mode:"blank",aid:a.id})},"Upload scanned assignment")));
+      h("div",null,upBtns({mode:"blank",aid:a.id},"Upload file","Scan the blank assignment",{disabled:!CAP.sample})));
   }
   return c;
 }
@@ -961,7 +1032,7 @@ function stackCard(a){
   const busy=S.busy["stack"+a.id];
   return h("div",{class:"card"},h("h3",null,"Upload the whole class at once"),
     h("div",{class:"small muted"},`Scan the stack of papers into one PDF, or pick many photos. Each student needs their name on their first page. Claude splits the pages by name and grades each paper, up to ${MAX_PAGES} pages per student.`),
-    busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,h("button",{class:"btn primary",disabled:!CAP.sample,onclick:()=>pickMode({mode:"stack",aid:a.id})},"Upload scanned stack")),
+    busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload scanned stack","Scan the class's papers",{disabled:!CAP.sample,primary:true,scanLabel:"Scan the stack"})),
     a.stackNote?h("div",{class:"notice small"},a.stackNote):null);
 }
 async function uploadStack(aid,files){
@@ -1333,7 +1404,7 @@ function customForm(){
     h("div",{class:"f"},h("span",{class:"small"},h("b",null,"Who is it for?")),
       h("div",{class:"seg",style:"flex-wrap:wrap"},[["me","My own coursework"],["students","My students"]].map(([k,l])=>h("button",{"aria-pressed":String(d.audience===k),onclick:()=>{d.audience=k;draw()}},l)))),
     h("div",{class:"drop"},h("div",null,h("b",null,"Rubric"),d.fileNames.length?` · ${d.fileNames.join(", ")}`:" · PDF, photos or a text file"),
-      h("div",{style:"margin-top:8px"},h("button",{class:"btn",onclick:()=>pickMode({mode:"rubric"})},d.fileNames.length?"Replace rubric":"Upload rubric"))),
+      h("div",{style:"margin-top:8px"},upBtns({mode:"rubric"},d.fileNames.length?"Replace by upload":"Upload rubric","Scan the rubric",{scanLabel:d.fileNames.length?"Rescan rubric":"Scan rubric"}))),
     h("label",{class:"f"},"Assignment instructions or prompt (optional)",h("textarea",{id:"cPrompt",placeholder:"Paste what the instructor asked for, e.g. 'Write a case study of a gifted learner in your class…'",oninput:e=>d.prompt=e.target.value},d.prompt)),
     h("label",{class:"f"},d.audience==="me"?"Your real details and notes":"What students should do (optional)",
       h("textarea",{id:"cNotes",style:"min-height:130px",placeholder:d.audience==="me"?"The facts only you know: the student (use a pseudonym or initials), what you observed, test scores, interventions you tried, results, what you'd do next.":"Topic, materials, due date, anything the assignment should include.",oninput:e=>d.notes=e.target.value},d.notes)),
