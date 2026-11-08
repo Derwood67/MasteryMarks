@@ -126,6 +126,12 @@ pre.tx{white-space:pre-wrap;font:400 .88rem/1.5 var(--f-body);background:var(--s
 .job{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line);flex-wrap:wrap}
 .job:first-child{border-top:0}
 .job .t{flex:1 1 180px;min-width:0}
+.qfb{display:flex;flex-direction:column;margin-top:8px}
+.qi{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:.9rem}
+.qi:first-child{border-top:0}
+.qmark{flex:none;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;color:var(--on-score)}
+.qi.ok .qmark{background:var(--s3)}
+.qi.no .qmark{background:var(--s1)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;font-size:.9rem;z-index:30;max-width:calc(100% - 40px)}
 .drop{border:2px dashed var(--line);border-radius:12px;padding:14px;text-align:center;color:var(--muted);font-size:.9rem}
 .drop.on{border-color:var(--accent);background:var(--accent-soft)}
@@ -390,7 +396,7 @@ const byName=(a,b)=>a.name.localeCompare(b.name);
 
 /* ---------------- state + storage ---------------- */
 const S={students:{},assignments:{},submissions:{},rosters:{},custom:{},openC:null,settings:{school:"Morehead Montessori Elementary School",teacher:"Mr. Echols",term:""},
-  tab:"assign", openA:null, gb:{grade:4,subj:"ela",code:null}, arch:{student:"",q:""}, rep:{grade:"all",student:"all",ungraded:false},
+  tab:"grade", openA:null, g:{aid:"new",grade:4,subj:"math",title:""}, gb:{grade:4,subj:"ela",code:null}, arch:{student:"",q:""}, rep:{grade:"all",student:"all",ungraded:false},
   busy:{}, upTarget:null, viewSub:null, confirm:null};
 const CAP={db:null,assets:null,sample:null,downloads:null,imgMax:8,imgOK:true,ready:false};
 /* Says why a Claude step can't run here; returns true when it can. */
@@ -449,12 +455,12 @@ function render(){ if(rq) return; rq=true; requestAnimationFrame(()=>{rq=false; 
   draw();})}
 document.addEventListener("focusout",()=>{if(deferred){deferred=false;setTimeout(render,0)}});
 
-const TABS=[["assign","Assignments"],["work","Student work"],["gb","Gradebook"],["arch","Archive"],["class","Class"],["rep","Reports"],["custom","Custom"]];
+const TABS=[["grade","Grade papers"],["assign","Assignments"],["work","Student work"],["gb","Gradebook"],["arch","Archive"],["class","Class"],["rep","Reports"],["custom","Custom"]];
 function drawTabs(){const n=$("tabs");n.replaceChildren(...TABS.map(([k,l])=>h("button",{class:"tab",role:"tab","aria-selected":String(S.tab===k),onclick:()=>{S.tab=k;S.openA=null;S.openC=null;draw();scrollTo(0,0)}},l)))}
 function draw(){
   drawTabs();
   const m=$("main"); const y=scrollY;
-  const v={assign:S.openA?viewAssignment:viewAssignments,gb:viewGradebook,arch:viewArchive,class:viewClass,rep:viewReports,custom:viewCustom,work:viewWork}[S.tab]();
+  const v={assign:S.openA?viewAssignment:viewAssignments,gb:viewGradebook,arch:viewArchive,class:viewClass,rep:viewReports,custom:viewCustom,work:viewWork,grade:viewGrade}[S.tab]();
   m.replaceChildren(...[].concat(v).flat(Infinity).filter(x=>x!=null&&x!==false));
   document.querySelectorAll(".overlay").forEach(o=>o.remove());
   if(S.viewSub) drawViewer();
@@ -506,6 +512,79 @@ function drawJobs(){
             h("button",{class:"btn",onclick:()=>goJob({a:aid})},`Review ${list.length}`));}))
         :h("div",{class:"small muted"},"No suggested grades are waiting.")));
   document.body.append(ov);
+}
+function itemsView(sub,math,open){
+  const it=sub.ai&&sub.ai.items; if(!it||!it.length) return null;
+  const right=it.filter(x=>x.right).length;
+  return h("details",{open:open||null},h("summary",null,`Question by question: ${right} right, ${it.length-right} to fix`),
+    h("div",{class:"qfb"},it.map(x=>h("div",{class:"qi "+(x.right?"ok":"no")},
+      h("span",{class:"qmark","aria-label":x.right?"Correct":"Needs fixing"},x.right?"✓":"✗"),
+      h("div",{style:"min-width:0"},h("b",null,`${x.n}. `),x.right?"Correct. ":"Let's fix this. ",fr(x.note,math),
+        !x.right&&(x.student||x.answer)?h("div",{class:"small muted"},x.student?["You wrote: ",fr(x.student,math)]:null,x.student&&x.answer?"  ·  ":null,x.answer?["Answer: ",fr(x.answer,math)]:null):null)))));
+}
+/* ---------------- Grade papers (the simple path) ---------------- */
+function viewGrade(){
+  const g=S.g; const list=Object.values(S.assignments).sort((x,y)=>(y.created||0)-(x.created||0));
+  if(g.aid!=="new"&&!S.assignments[g.aid]) g.aid="new";
+  const a=g.aid==="new"?null:S.assignments[g.aid];
+  const stackBusy=a&&S.busy["stack"+a.id];
+  const startNew=scan=>{ if(!canClaude(true)) return;
+    draft.grade=g.grade; draft.subj=g.subj; draft.title=g.title||""; draft.codes=[]; draft.notes="";
+    if(scan) scanFor({mode:"papers-new"},"Scan the class's papers"); else pickMode({mode:"papers-new"}); };
+  const startOld=scan=>{ if(!canClaude(true)) return; if(scan) scanFor({mode:"stack",aid:a.id},"Scan the class's papers"); else pickMode({mode:"stack",aid:a.id}); };
+  const out=[h("h2",null,"Grade papers"),
+    h("div",{class:"small muted"},"Three steps. Each student's name must be on their first page. Fronts and backs are both checked.")];
+  if((!CAP.sample||!CAP.imgOK)&&CAP.ready) out.push(h("div",{class:"notice small"},!CAP.sample?"Grading works when the gradebook is opened from its Claude link (claude.ai or the Claude app).":"This view can't send photos to Claude. Open the gradebook on claude.ai in a web browser to grade."));
+  out.push(h("div",{class:"card"},
+    h("h3",null,"1  Which assignment?"),
+    h("select",{id:"gAid","aria-label":"Assignment",onchange:e=>{g.aid=e.target.value;draw()}},
+      h("option",{value:"new",selected:g.aid==="new"},"A new assignment"),
+      list.map(x=>h("option",{value:x.id,selected:x.id===g.aid},`${x.title} · ${gradeLabel(x)} ${SUBJ[x.subj]}`))),
+    a?h("div",{class:"small muted"},a.key&&a.key.answers&&a.key.answers.length?`Uses your answer key (${a.key.answers.length} answers).`:"An answer key will be made from the papers."):
+    [h("div",{class:"seg",style:"flex-wrap:wrap"},[[4,"Grade 4"],[5,"Grade 5"],["both","Grades 4 & 5"]].map(([v,l])=>h("button",{"aria-pressed":String(g.grade==v),onclick:()=>{g.grade=v;draw()}},l))),
+     h("div",{class:"chips"},Object.keys(SUBJ).map(k=>h("button",{class:"chip","aria-pressed":String(g.subj===k),onclick:()=>{g.subj=k;draw()}},SUBJ[k]))),
+     h("input",{type:"text",id:"gTitle",value:g.title,placeholder:"Name it (optional), e.g. Fractions quiz",oninput:e=>g.title=e.target.value}),
+     h("div",{class:"small muted"},"The answer key is made from the papers. You can check it afterward.")]),
+  h("div",{class:"card"},
+    h("h3",null,"2  Add the students' papers"),
+    stackBusy?h("span",{class:"pill"},h("span",{class:"spin"}),stackBusy):
+    h("div",{class:"row"},
+      h("button",{class:"btn primary",onclick:()=>a?startOld(true):startNew(true)},"Scan papers"),
+      h("button",{class:"btn primary",onclick:()=>a?startOld(false):startNew(false)},"Upload papers")),
+    h("div",{class:"small muted"},"Scan with your phone or tablet camera, or upload a PDF from the copier. Grading starts as soon as the papers are in."),
+    a&&a.stackNote?h("div",{class:"notice small"},a.stackNote):null));
+  if(a) out.push(gradeResults(a));
+  return out;
+}
+function gradeResults(a){
+  const math=a.subj==="math";
+  const rows=students(gradesOf(a)).map(st=>({st,sub:S.submissions[a.id+"__"+st.id]})).filter(r=>r.sub||S.busy[a.id+"__"+r.st.id]);
+  const rev=rows.filter(r=>r.sub&&r.sub.status==="review").map(r=>r.sub);
+  const done=rows.filter(r=>r.sub&&(r.sub.ai||r.sub.status==="accepted")).map(r=>r.sub);
+  return h("div",{class:"card"},
+    h("h3",null,"3  Grades"),
+    !rows.length?h("div",{class:"small muted"},"Grades show up here as each paper is finished."):null,
+    rows.length?h("div",{class:"row"},
+      rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Saved ${rev.length} grade${rev.length>1?"s":""} to the gradebook.`)}},`Accept all ${rev.length} grades`):null,
+      done.length?printBtn(()=>studentPdf(done,`${a.title} - graded papers`,{pages:true}),`Print all (${done.length}) with feedback`):null,
+      h("button",{class:"btn ghost",onclick:()=>{S.keyView=a.id;draw()}},"Answer key")):null,
+    rows.length?h("div",{class:"list"},rows.map(({st,sub})=>{
+      const key=a.id+"__"+st.id, busy=S.busy[key];
+      if(busy||!sub) return h("div",{class:"sub"},h("div",{class:"subhead"},h("span",{class:"name"},st.name),h("span",{class:"pill"},h("span",{class:"spin"}),busy||"Waiting…")));
+      const avg=avgScore(a,st,sub);
+      return h("div",{class:"sub"},
+        h("div",{class:"subhead"},h("span",{class:"name"},st.name),
+          avg!=null?h("span",{class:"badge b"+Math.round(avg),title:"Average score"},avg.toFixed(1)):null,
+          sub.ai&&sub.ai.correct?h("span",{class:"small muted"},sub.ai.correct+" right"):null,
+          h("span",{class:"pill "+(sub.status==="accepted"?"ok":sub.status==="review"?"rev":"")},{accepted:"Saved",review:"Check and accept",uploaded:"Not graded",error:"Needs attention"}[sub.status]||sub.status)),
+        sub.error?h("div",{class:"notice small"},sub.error):null,
+        fbOf(sub)?h("div",{class:"feedback"},fbOf(sub)):null,
+        itemsView(sub,math,false),
+        h("div",{class:"row"},
+          sub.status==="review"?h("button",{class:"btn",onclick:()=>{acceptSub(sub);toast(`Saved ${st.name}'s grade.`)}},"Accept"):null,
+          (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print"):null,
+          h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change scores")));
+    })):null);
 }
 /* ---------------- Assignments ---------------- */
 let draft={title:"",grade:4,subj:"ela",codes:[],notes:"",key:null,pages:[],busy:""}, showNew=false;
@@ -707,6 +786,7 @@ function subRow(a,st,sub){
               put("submissions",key,nx); if(sub.status==="accepted") pushScores(nx);}},n))),
           sub.ai&&sub.ai.reasons&&sub.ai.reasons[c]?h("div",{class:"why"},sub.ai.reasons[c]):null];
       })));
+      { const iv=itemsView(sub,a.subj==="math",false); if(iv) parts.push(iv); }
       if(sub.ai&&(sub.ai.correct||sub.ai.pagesRead)) parts.push(h("div",{class:"small muted"},[sub.ai.correct?"Correct: "+sub.ai.correct:"",sub.ai.pagesRead?`${sub.ai.pagesRead} page${sub.ai.pagesRead>1?"s":""} read`:""].filter(Boolean).join(" · ")));
       if(sub.ai||sub.status==="accepted") parts.push(h("label",{class:"f"},`Feedback from ${teacherName()}`,
         h("textarea",{id:"fb-"+key,style:"min-height:70px",onchange:e=>put("submissions",key,{...S.submissions[key],feedback:e.target.value})},fbOf(sub))));
@@ -935,7 +1015,8 @@ async function gradeIt(key,blobs,text){
       :`Standards to score:\n${myCodes.map(c=>`- ${c}: ${STDTEXT[c]}`).join("\n")}\nWhere the answer sheet tags a question with a standard, base that standard's score on those questions.`,
     `Scale (score each standard separately, whole numbers only):\n4 = ${LEVEL_DESC[4]}\n3 = ${LEVEL_DESC[3]}\n2 = ${LEVEL_DESC[2]}\n1 = ${LEVEL_DESC[1]}`,
     `Judge the whole assignment across all pages. Compare each answer with the answer sheet. If the work shows no evidence for a standard, use null for that standard.`].join("\n\n");
-  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4 or null}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name: one strength, one next step. Never mention AI, Claude, or automated grading."}`;
+  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4 or null}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name: one strength, one next step. Never mention AI, Claude, or automated grading.", "items": [{"n": "question number", "right": true, "student": "what the student answered, short", "answer": "the correct answer (only when wrong)", "note": "if right: a short, specific bit of praise naming what they did well; if wrong: kindly explain the mistake and how to fix it, in words a 9–11 year old understands"}]}
+Include one entry in "items" for every question, in order. Feedback notes speak to the student as ${teacherName()} would and never mention AI.`;
   try{
     let r, transcript="", legibility="";
     if(blobs.length<=CAP.imgMax){
@@ -978,7 +1059,9 @@ async function gradeIt(key,blobs,text){
     }
     const scores={}, reasons={};
     for(const c of codes){ const v=Number(r&&r.scores?r.scores[c]:NaN); if(v>=1&&v<=4) scores[c]=Math.round(v); const w=r&&r.reasons?r.reasons[c]:""; if(w) reasons[c]=String(w).slice(0,400); }
-    const ai={scores,reasons,transcript:transcript.slice(0,12000),feedback:String(r&&r.feedback||"").slice(0,600),correct:String(r&&r.correct||"").slice(0,40),legibility,pagesRead:blobs.length,gradedAt:Date.now()};
+    const items=(Array.isArray(r&&r.items)?r.items:[]).slice(0,60).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),right:!!(x&&x.right),student:String(x&&x.student||"").slice(0,300),answer:String(x&&x.answer||"").slice(0,300),note:String(x&&x.note||"").slice(0,400)}));
+    const corr=String(r&&r.correct||"")||(items.length?`${items.filter(x=>x.right).length} of ${items.length}`:"");
+    const ai={scores,reasons,items,transcript:transcript.slice(0,12000),feedback:String(r&&r.feedback||"").slice(0,600),correct:corr.slice(0,40),legibility,pagesRead:blobs.length,gradedAt:Date.now()};
     put("submissions",key,{...S.submissions[key],ai,scores:{...scores},status:"review",error:""});
   }catch(e){
     if(e&&(e.code==="not_granted"||e.code==="sampling_disabled")) CAP.sample=null;
@@ -1180,7 +1263,7 @@ async function startGradingNew(files){
   put("assignments",id,{id,title:title||`Scanned assignment, ${new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"})}`,autoTitle:!title,
     grade:grades[0],grades,subj:draft.subj,codes:[...draft.codes],notes:draft.notes.trim(),key:null,pages:[],created:Date.now()});
   draft={title:"",grade:draft.grade,subj:draft.subj,codes:[],notes:"",key:null,pages:[],busy:"",mode:draft.mode}; showNew=false;
-  S.tab="assign"; S.openA=id; draw(); scrollTo(0,0);
+  if(S.tab==="grade"){ S.g.aid=id; draw(); } else { S.tab="assign"; S.openA=id; draw(); scrollTo(0,0); }
   toast("Grading started. Watch it with Grading in progress at the top.",3000);
   await uploadStack(id,files);
 }
@@ -1309,6 +1392,7 @@ function viewWork(){
           h("span",{class:"pill "+(sub.status==="accepted"?"ok":sub.status==="review"?"rev":"")},{accepted:"Graded",review:"Needs review",uploaded:"Not graded",error:"Needs attention"}[sub.status]||sub.status)),
         h("div",{class:"row",style:"gap:6px"},codesFor(a,st).map(c=>h("span",{class:"row",style:"gap:4px"},h("span",{class:"code"},c),badge((sub.scores||{})[c]))),
           sub.ai&&sub.ai.correct?h("span",{class:"small muted"},`· Correct: ${sub.ai.correct}`):null),
+        itemsView(sub,a.subj==="math",false),
         sub.pages&&sub.pages.length?h("div",{class:"thumbs"},sub.pages.map((p,i)=>h("img",{src:pageSrc(p),alt:`${st.name}, page ${i+1}`,loading:"lazy",onclick:()=>{S.viewSub=key;draw()}}))):null,
         (sub.ai||sub.status==="accepted")?h("label",{class:"f"},`Feedback from ${teacherName()}`,h("textarea",{id:"wfb-"+key,style:"min-height:60px",onchange:e=>put("submissions",key,{...S.submissions[key],feedback:e.target.value})},fbOf(sub))):null,
         h("div",{class:"row"},
@@ -1349,6 +1433,7 @@ function drawViewer(){
       h("div",{class:"tbl"},h("table",null,h("thead",null,h("tr",null,h("th",null,"Standard"),h("th",null,"Score"),h("th",null,"Evidence"))),
         h("tbody",null,codesFor(a,st).map(c=>h("tr",null,h("td",null,h("span",{class:"code"},c)),h("td",null,badge((s.scores||{})[c])," ",(s.scores||{})[c]?LEVELS[s.scores[c]]:"Not scored"),h("td",{class:"small"},(s.ai&&s.ai.reasons&&s.ai.reasons[c])||"")))))),
       fbOf(s)?h("div",{class:"feedback"},h("b",null,`Feedback from ${teacherName()}: `),fbOf(s)):null,
+      itemsView(s,a.subj==="math",true),
       h("div",{class:"row"},printBtn(()=>studentPdf([s],`${st.name} - ${a.title}`),"Print"),h("button",{class:"btn",onclick:()=>studentPdf([s],`${st.name} - ${a.title}`)},"Student PDF")),
       s.ai&&s.ai.transcript?h("details",null,h("summary",null,"Transcribed work"),h("pre",{class:"tx"},s.ai.transcript)):null,
       s.text?h("details",null,h("summary",null,"Typed submission"),h("pre",{class:"tx"},s.text)):null,
@@ -1406,6 +1491,7 @@ async function studentPdf(subs,fname,opts){
       const a=S.assignments[sub.assignmentId], st=S.students[sub.studentId];
       if(si) doc.addPage();
       let y=0; const need=n=>{ if(y+n>H-50){ doc.addPage(); y=50; } };
+      const sub0Cursor=()=>({get y(){return y},set y(v){y=v}});
       doc.setFillColor(30,106,80); doc.rect(0,0,W,6,"F");
       doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(90,104,98);
       doc.text([S.settings.school,T,S.settings.term].filter(Boolean).join("  ·  "),M,30);
@@ -1433,7 +1519,25 @@ async function studentPdf(subs,fname,opts){
         doc.setFont("helvetica","italic"); doc.setFontSize(10.5); doc.text(`— ${T}`,M+TW-14,y+boxH-10,{align:"right"});
         y+=boxH+20;
       }
-      const ans=(sub.ai&&sub.ai.transcript||"").trim()||(sub.text||"").trim();
+      const its=sub.ai&&sub.ai.items&&sub.ai.items.length?sub.ai.items:null;
+      if(its){
+        const cur=sub0Cursor(); const math=a.subj==="math";
+        need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(23,32,28); doc.text("Question by question",M,y); y+=12;
+        its.forEach((x,i)=>{
+          need(46); if(i){ doc.setDrawColor(220,226,223); doc.setLineWidth(0.5); doc.line(M,y,M+TW,y); } y+=8;
+          const col=x.right?[46,138,85]:[192,72,42]; const pg0=doc.getCurrentPageInfo().pageNumber;
+          doc.setFont("helvetica","normal"); doc.setDrawColor(23,32,28); doc.setTextColor(23,32,28); cur.firstBase=null;
+          drawRich(doc,x.note||(x.right?"Correct!":""),M+86,cur,TW-86,10.5,math,need);
+          { const pg1=doc.getCurrentPageInfo().pageNumber, fb=cur.firstBase; if(pg1!==pg0) doc.setPage(pg0);
+            doc.setFillColor(...col); doc.roundedRect(M,fb-11,58,15,4,4,"F"); doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(255,255,255);
+            doc.text(x.right?"CORRECT":"LET'S FIX",M+29,fb-0.5,{align:"center"});
+            doc.setTextColor(23,32,28); doc.setFontSize(11); doc.text(`${x.n}.`,M+66,fb); if(pg1!==pg0) doc.setPage(pg1); doc.setFont("helvetica","normal"); }
+          if(!x.right&&(x.student||x.answer)){ doc.setTextColor(90,104,98); drawRich(doc,[x.student?`You wrote: ${x.student}`:"",x.answer?`Answer: ${x.answer}`:""].filter(Boolean).join("     "),M+86,cur,TW-86,9.5,math,need); doc.setTextColor(23,32,28); }
+          y+=8;
+        });
+        y+=8;
+      }
+      const ans=its?"":(sub.ai&&sub.ai.transcript||"").trim()||(sub.text||"").trim();
       if(ans){
         need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(23,32,28); doc.text("Your answers",M,y); y+=20;
         doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(40,50,45);
@@ -1442,7 +1546,7 @@ async function studentPdf(subs,fname,opts){
         y+=10;
       }
       const vk=verOf(a,lvlOf(st)).key;
-      if(vk&&vk.answers&&vk.answers.length){
+      if(!its&&vk&&vk.answers&&vk.answers.length){
         y+=16; need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(23,32,28); doc.text("Correct answers",M,y); y+=14;
         const cur={get y(){return y},set y(v){y=v}};
         doc.setFont("helvetica","normal"); doc.setTextColor(40,50,45); doc.setDrawColor(23,32,28);
