@@ -388,7 +388,14 @@ const byName=(a,b)=>a.name.localeCompare(b.name);
 const S={students:{},assignments:{},submissions:{},rosters:{},custom:{},openC:null,settings:{school:"Morehead Montessori Elementary School",teacher:"Mr. Echols",term:""},
   tab:"assign", openA:null, gb:{grade:4,subj:"ela",code:null}, arch:{student:"",q:""}, rep:{grade:"all",student:"all",ungraded:false},
   busy:{}, upTarget:null, viewSub:null, confirm:null};
-const CAP={db:null,assets:null,sample:null,downloads:null,imgMax:8,ready:false};
+const CAP={db:null,assets:null,sample:null,downloads:null,imgMax:8,imgOK:true,ready:false};
+/* Says why a Claude step can't run here; returns true when it can. */
+function canClaude(photos){
+  if(!CAP.ready){ toast("Still connecting. Try again in a moment."); return false; }
+  if(!CAP.sample){ toast(location.hostname.endsWith("github.io")||location.protocol==="file:"?"This step needs Claude. Open your gradebook from its Claude link (claude.ai or the Claude app).":"This step needs Claude's permission. Reload the page and choose Allow when asked."); return false; }
+  if(photos&&!CAP.imgOK){ toast("This view can't send photos to Claude. Open the gradebook on claude.ai in a web browser."); return false; }
+  return true;
+}
 const LS="gradebook-local-v1";
 function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LS)||"null");if(d){for(const k of ["students","assignments","submissions","rosters","custom"])S[k]=d[k]||{};if(d.settings)S.settings=d.settings}}catch(e){}}
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({students:S.students,assignments:S.assignments,submissions:S.submissions,rosters:S.rosters,custom:S.custom,settings:S.settings}))}catch(e){}}
@@ -515,7 +522,7 @@ async function regradeAll(aid){
 }
 function viewAssignments(){
   const out=[];
-  if(!CAP.sample&&CAP.ready) out.push(h("div",{class:"notice"},"Automatic grading works when this page is open in the Claude app or claude.ai. You can still upload work to the archive and score it yourself."));
+  if((!CAP.sample||!CAP.imgOK)&&CAP.ready) out.push(h("div",{class:"notice"},!CAP.sample?"Automatic grading, answer sheets and writing assignments work when the gradebook is opened from its Claude link. Uploading, scanning and scoring by hand work here.":"This view can't send photos to Claude, so uploaded papers are saved but not graded automatically. Open the gradebook on claude.ai in a web browser to grade them."));
   out.push(h("div",{class:"row spread"},h("h2",null,"Assignments"),h("button",{class:"btn primary",onclick:()=>{showNew=!showNew;draw()}},showNew?"Close":"New assignment")));
   if(showNew) out.push(newAssignmentForm());
   const list=Object.values(S.assignments).sort((a,b)=>(b.created||0)-(a.created||0));
@@ -547,7 +554,7 @@ function newAssignmentForm(){
     draft.mode==="make"?makePanel():
     h("div",{class:"drop"},draft.busy?h("span",{class:"row",style:"justify-content:center"},h("span",{class:"spin"}),draft.busy):[
       h("div",null,"Choose the grade and core subject above first. Then upload the blank assignment as a PDF or photos, up to 10 sheets, front and back. The title, standards and answer sheet are filled in for you."),
-      h("div",{style:"margin-top:10px"},upBtns({mode:"blank-new"},draft.key?"Upload a different file":"Upload file","Scan the blank assignment",{disabled:!CAP.sample}))]),
+      h("div",{style:"margin-top:10px"},upBtns({mode:"blank-new"},draft.key?"Upload a different file":"Upload file","Scan the blank assignment",{needsClaude:true}))]),
     draft.key&&draft.mode==="scan"?h("div",{class:"f"},h("span",{class:"small"},h("b",null,`Answer sheet · ${draft.key.answers.length} items`)," · you can edit answers after you create the assignment"),keyTable(draft.key,null)):null,
     h("label",{class:"f"},"Assignment title",h("input",{type:"text",id:"aTitle",value:draft.title,placeholder:"e.g. Fractions exit ticket, Nov 10",oninput:e=>draft.title=e.target.value})),
     h("div",{class:"f"},h("span",{class:"small"},h("b",null,"Standards"),draft.key?" · change any you like.":" · optional. Leave blank and Claude picks them from the scan or the first paper it grades."),cl),
@@ -655,10 +662,10 @@ function handleFiles(t,files){
 const SCAN_LIMIT={student:MAX_PAGES,"blank-new":MAX_PAGES,blank:MAX_PAGES,rubric:6,stack:300};
 function scanFor(t,title){ S.scan={t,title,pages:[],clean:true,duplex:t.mode!=="rubric",needBack:false,busy:""}; draw(); }
 function upBtns(t,uploadLabel,scanTitle,opts){
-  opts=opts||{};
+  opts=opts||{}; const ok=()=>!opts.needsClaude||canClaude(true);
   return h("span",{class:"row",style:"gap:8px"},
-    h("button",{class:"btn"+(opts.primary?" primary":""),disabled:!!opts.disabled,onclick:()=>scanFor(t,scanTitle)},opts.scanLabel||"Scan with camera"),
-    h("button",{class:"btn",disabled:!!opts.disabled,onclick:()=>pickMode(t)},uploadLabel));
+    h("button",{class:"btn"+(opts.primary?" primary":""),disabled:!!opts.disabled,onclick:()=>{if(ok()) scanFor(t,scanTitle)}},opts.scanLabel||"Scan with camera"),
+    h("button",{class:"btn",disabled:!!opts.disabled,onclick:()=>{if(ok()) pickMode(t)}},uploadLabel));
 }
 async function enhancePage(file,clean){
   const bmp=await createImageBitmap(file,{imageOrientation:"from-image"}).catch(()=>null);
@@ -805,7 +812,8 @@ async function submitPages(aid,sid,blobs,text){
   const old=S.submissions[key]; const pages=await uploadPages(blobs);
   oldAssets(old);
   put("submissions",key,{id:key,assignmentId:aid,studentId:sid,pages,text:text||"",status:"uploaded",scores:{},ai:null,error:"",submittedAt:Date.now()});
-  if(CAP.sample) await gradeIt(key,blobs,text||""); else setBusy(key,null);
+  if(CAP.sample&&(CAP.imgOK||!blobs.length)) await gradeIt(key,blobs,text||"");
+  else { setBusy(key,null); put("submissions",key,{...S.submissions[key],status:"uploaded",error:CAP.sample?"Saved. This view can't send photos to Claude, so open the gradebook on claude.ai in a web browser to grade it, or score it yourself below.":"Saved. Automatic grading needs your Claude link (claude.ai or the Claude app). You can score it yourself below."}); }
 }
 async function regrade(aid,sid){
   const key=aid+"__"+sid, sub=S.submissions[key]; if(!sub) return;
@@ -952,10 +960,10 @@ function answerCard(a){
     c.append(keyTable(v.key,a.id,a.versions?tab:null));
     if(a.pages&&a.pages.length) c.append(h("div",{class:"thumbs"},a.pages.map((p,i)=>h("img",{src:pageSrc(p),alt:`Assignment page ${i+1}`,loading:"lazy"}))));
     c.append(h("div",{class:"row"},h("button",{class:"btn",onclick:()=>keyPdf(a)},a.versions?"Download answer sheets PDF (all 3)":"Download answer sheet PDF"),
-      CAP.sample?upBtns({mode:"blank",aid:a.id},"Rebuild from a file","Scan the blank assignment",{scanLabel:"Rebuild from a new scan"}):null));
+      upBtns({mode:"blank",aid:a.id},"Rebuild from a file","Scan the blank assignment",{needsClaude:true,scanLabel:"Rebuild from a new scan"})));
   } else {
     c.append(h("div",{class:"small muted"},"Optional. Upload the scanned blank assignment (up to 10 sheets, front and back) to get an answer sheet to grade against. Without one, papers are still graded and the answers are worked out automatically."),
-      h("div",null,upBtns({mode:"blank",aid:a.id},"Upload file","Scan the blank assignment",{disabled:!CAP.sample})));
+      h("div",null,upBtns({mode:"blank",aid:a.id},"Upload file","Scan the blank assignment",{needsClaude:true})));
   }
   return c;
 }
@@ -1056,7 +1064,7 @@ function stackCard(a){
   const busy=S.busy["stack"+a.id];
   return h("div",{class:"card"},h("h3",null,"Upload the whole class at once"),
     h("div",{class:"small muted"},`Scan the stack of papers into one PDF, or pick many photos. Each student needs their name on their first page. Claude splits the pages by name and grades each paper, up to 10 sheets per student. Scan front and back; blank backs are skipped.`),
-    busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload scanned stack","Scan the class's papers",{disabled:!CAP.sample,primary:true,scanLabel:"Scan the stack"})),
+    busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload scanned stack","Scan the class's papers",{needsClaude:true,primary:true,scanLabel:"Scan the stack"})),
     a.stackNote?h("div",{class:"notice small"},a.stackNote):null);
 }
 async function uploadStack(aid,files){
@@ -1278,7 +1286,7 @@ function makePanel(){
       h("label",{class:"row small"},h("input",{type:"checkbox",id:"mkPass",checked:!!draft.mkPassage,onchange:e=>draft.mkPassage=e.target.checked}),"Include a reading passage"),
       h("label",{class:"row small"},h("input",{type:"checkbox",id:"mkWord",checked:!!draft.mkWord,onchange:e=>draft.mkWord=e.target.checked}),"Include word problems")),
     draft.grade==="both"?h("div",{class:"notice small"},"Created assignments are written for one grade at a time. Pick Grade 4 or Grade 5 above, then create one for the other grade."):
-    h("div",{class:"row"},h("button",{class:"btn primary",disabled:!CAP.sample,onclick:makeAssignment},draft.versions?"Write new versions":"Write the assignment")),
+    h("div",{class:"row"},h("button",{class:"btn primary",onclick:()=>{if(canClaude(false)) makeAssignment()}},draft.versions?"Write new versions":"Write the assignment")),
     draft.versions?h("div",{class:"f"},tierTabs(tab,l=>{draft.tab=l;draw()}),wsPreview(draft.versions[tab].ws,true,draft.subj==="math")):null);
 }
 function wsPreview(ws,open,math){
@@ -1435,7 +1443,7 @@ function customForm(){
     d.audience==="me"?h("div",{class:"small muted"},"The draft is built from your notes. Anything your notes don't cover is marked [ADD: …] for you to fill in, so nothing about a real student is made up. Use a pseudonym for students."):null,
     h("label",{class:"f"},"Length",h("select",{id:"cWords",onchange:e=>d.words=+e.target.value},[[600,"About 600 words"],[1000,"About 1,000 words"],[1500,"About 1,500 words"],[2500,"About 2,500 words"]].map(([n,l])=>h("option",{value:n,selected:d.words===n},l)))),
     !(S.settings.voice||"").trim()?h("div",{class:"notice small"},"Tip: add a sample of your writing under \"Teach it your writing voice\" below so the draft sounds like you."):null,
-    h("div",{class:"row"},h("button",{class:"btn primary",disabled:!CAP.sample,onclick:writeCustom},"Write it")));
+    h("div",{class:"row"},h("button",{class:"btn primary",onclick:()=>{if(canClaude(cdraft.files.length>0)) writeCustom()}},"Write it")));
 }
 async function prepRubric(files){
   const r=await prepareFiles(files,Math.min(CAP.imgMax,6));
@@ -1491,7 +1499,7 @@ function customDetail(c){
     h("div",{class:"card"},h("h3",null,"Ask for changes"),
       busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):[
         h("textarea",{id:"cRev-"+c.id,placeholder:"e.g. Make the recommendations section longer and add the data from my notes. Sound less formal.",style:"min-height:80px"}),
-        h("div",null,h("button",{class:"btn",disabled:!CAP.sample,onclick:()=>reviseCustom(c.id,($("cRev-"+c.id)||{}).value||"")},"Revise draft"))]),
+        h("div",null,h("button",{class:"btn",onclick:()=>canClaude(false)&&reviseCustom(c.id,($("cRev-"+c.id)||{}).value||"")},"Revise draft"))]),
     c.selfcheck&&c.selfcheck.length?h("div",{class:"card"},h("h3",null,"Rubric check"),h("div",{class:"tbl"},h("table",null,h("thead",null,h("tr",null,h("th",null,"Criterion"),h("th",null,"Where it's met"))),
       h("tbody",null,c.selfcheck.map(x=>h("tr",null,h("td",null,x.criterion),h("td",{class:"small"},x.how))))))):null,
     c.rubricPages&&c.rubricPages.length?h("div",{class:"card"},h("h3",null,"Rubric"),h("div",{class:"thumbs"},c.rubricPages.map((p,i)=>h("img",{src:pageSrc(p),alt:`Rubric page ${i+1}`,loading:"lazy"})))):null
@@ -1670,7 +1678,7 @@ draw();
   const C=window.claude;
   const [db,assets,sample,downloads]=C&&C.use?await Promise.all(["db","assets","sample","downloads"].map(n=>C.use(n).catch(()=>null))):[null,null,null,null];
   CAP.db=db; CAP.assets=assets; CAP.sample=sample; CAP.downloads=downloads;
-  if(sample){ try{const l=await sample.limits(); if(l.images) CAP.imgMax=Math.max(1,l.images.maxCount); else CAP.sample=null; }catch(e){} }
+  if(sample){ try{const l=await sample.limits(); if(l&&l.images) CAP.imgMax=Math.max(1,l.images.maxCount); else CAP.imgOK=false; }catch(e){} }
   CAP.ready=true;
   if(db){ ["students","assignments","submissions","settings","rosters","custom"].forEach(subscribe); } else loadLocal();
   setStatus(); render();
