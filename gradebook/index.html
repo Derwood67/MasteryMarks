@@ -578,12 +578,10 @@ function calcGrade(a,st,sub){
   return {avg,lvl:avg!=null?Math.min(4,Math.max(1,Math.round(avg))):null,pct:total?right/total:null,right,total};
 }
 function gradePill(a,st,sub){
-  const g=calcGrade(a,st,sub); if(g.avg==null&&g.pct==null) return null;
-  return h("span",{class:"row",style:"gap:6px;align-items:center",title:"Calculated from this paper's standard scores and correct answers"},
+  const g=calcGrade(a,st,sub); if(g.avg==null) return null;
+  return h("span",{class:"row",style:"gap:6px;align-items:center",title:"The paper's standard scores averaged and rounded to 1–4"},
     h("span",{class:"small muted"},"Calculated grade"),
-    g.avg!=null?h("span",{class:"badge b"+g.lvl},g.avg.toFixed(1)):null,
-    g.avg!=null?h("span",{class:"small"},LEVELS[g.lvl]):null,
-    g.pct!=null?h("span",{class:"pill"},`${Math.round(g.pct*100)}% (${g.right} of ${g.total})`):null);
+    h("span",{class:"badge b"+g.lvl,"aria-label":`Calculated grade ${g.lvl}`},g.lvl));
 }
 /* ---------------- class results: graphs and what to reteach ---------------- */
 const GOAL=0.7; /* a standard needs reteaching when fewer than 70% of students score 3 or 4 */
