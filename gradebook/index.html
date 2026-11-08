@@ -554,7 +554,7 @@ function newAssignmentForm(){
     (draft.mode||"none")==="none"?h("div",{class:"small muted"},"Fill in the details below. You can add a scan later from the assignment page to get an answer sheet."):
     draft.mode==="make"?makePanel():
     h("div",{class:"drop"},draft.busy?h("span",{class:"row",style:"justify-content:center"},h("span",{class:"spin"}),draft.busy):[
-      h("div",null,"Choose the grade and core subject above first. Then upload the blank assignment as a PDF or photos, up to 10 pages. The title, standards and answer sheet are filled in for you."),
+      h("div",null,"Choose the grade and core subject above first. Then upload the blank assignment as a PDF or photos, up to 10 sheets, front and back. The title, standards and answer sheet are filled in for you."),
       h("div",{style:"margin-top:10px"},upBtns({mode:"blank-new"},draft.key?"Upload a different file":"Upload file","Scan the blank assignment",{disabled:!CAP.sample}))]),
     draft.key&&draft.mode==="scan"?h("div",{class:"f"},h("span",{class:"small"},h("b",null,`Answer sheet · ${draft.key.answers.length} items`)," · you can edit answers after you create the assignment"),keyTable(draft.key,null)):null,
     h("label",{class:"f"},"Assignment title",h("input",{type:"text",id:"aTitle",value:draft.title,placeholder:"e.g. Fractions exit ticket, Nov 10",oninput:e=>draft.title=e.target.value})),
@@ -582,7 +582,7 @@ function viewAssignment(){
       a.needsRegrade?h("div",{class:"notice row spread"},h("span",null,"Standards changed. Regrade the uploaded papers to score the new standards."),
         CAP.sample?h("button",{class:"btn",onclick:()=>regradeAll(a.id)},"Regrade all papers"):null):null,
       a.notes?h("div",{class:"small"},h("b",null,"Answer key / look-fors: "),a.notes):null,
-      h("div",{class:"small muted"},"Tap Upload work next to a student and choose every page of their assignment at once, up to 10 pages (photos or a PDF). Grading starts as soon as the pages are in. Handwriting is read automatically."),
+      h("div",{class:"small muted"},"Tap Upload work next to a student and choose every page of their assignment at once, front and back, up to 10 sheets (photos or a PDF). Blank backs are skipped. Grading starts as soon as the pages are in. Handwriting is read automatically."),
       h("div",{class:"row"},
         (()=>{const done=roster.map(st=>S.submissions[a.id+"__"+st.id]).filter(s=>s&&(s.ai||s.status==="accepted"));
           return done.length?h("button",{class:"btn",onclick:()=>studentPdf(done,`${a.title} - student pages`)},`Print student pages (${done.length})`):null})(),
@@ -641,7 +641,7 @@ function pushScores(sub){
 function acceptSub(sub){ const nx={...sub,status:"accepted",acceptedAt:Date.now()}; put("submissions",sub.id,nx); pushScores(nx); }
 
 /* ---------------- upload + grading ---------------- */
-const MAX_PAGES=10;
+const MAX_PAGES=20; /* 10 sheets, front and back */
 const blobCache={};
 function pageSrc(p){ return p.asset?"/_blob/"+p.asset : (blobCache[p.local]||""); }
 function pickMode(t){ S.upTarget=t; const f=$("filePick"); f.value=""; f.click(); }
@@ -661,7 +661,7 @@ function handleFiles(t,files){
 
 /* ---------------- scan with the camera ---------------- */
 const SCAN_LIMIT={student:MAX_PAGES,"blank-new":MAX_PAGES,blank:MAX_PAGES,rubric:6,stack:300};
-function scanFor(t,title){ S.scan={t,title,pages:[],clean:true,busy:""}; draw(); }
+function scanFor(t,title){ S.scan={t,title,pages:[],clean:true,duplex:t.mode!=="rubric",needBack:false,busy:""}; draw(); }
 function upBtns(t,uploadLabel,scanTitle,opts){
   opts=opts||{};
   return h("span",{class:"row",style:"gap:8px"},
@@ -692,10 +692,14 @@ async function addScanFiles(files){
   sc.busy="Cleaning up the page…"; draw();
   try{ for(const f of files){ if(sc.pages.length>=lim){toast(`That's the ${lim}-page limit.`);break}
       if(f.type==="application/pdf"||/\.pdf$/i.test(f.name)){ const r=await pdfToJpegs(f,lim-sc.pages.length); for(const b of r.pages) sc.pages.push({blob:b,url:URL.createObjectURL(b)}); }
-      else sc.pages.push(await enhancePage(f,sc.clean)); } }
+      else { const back=sc.duplex&&sc.needBack&&!sc.fromFiles; const p=await enhancePage(f,sc.clean);
+        if(back&&await isBlank(p.blob)){ URL.revokeObjectURL(p.url); toast("That back looked blank, so it was skipped."); }
+        else sc.pages.push({...p,side:back?"back":"front"});
+        if(sc.duplex&&!sc.fromFiles) sc.needBack=!back; } } }
   catch(e){ toast(e&&e.message?e.message:"Couldn't add that page."); }
-  sc.busy=""; draw();
+  sc.fromFiles=false; sc.busy=""; draw();
 }
+function sheetLabels(sc){ let n=0; return sc.pages.map((p,i)=>{ if(!sc.duplex) return `Page ${i+1}`; if(p.side!=="back") n++; return `Sheet ${n} · ${p.side==="back"?"back":"front"}`; }); }
 $("camPick").addEventListener("change",e=>{const files=[...e.target.files]; e.target.value=""; if(files.length) addScanFiles(files);});
 function drawScanner(){
   document.querySelectorAll(".overlay.scan").forEach(o=>o.remove());
@@ -704,19 +708,23 @@ function drawScanner(){
   const finish=()=>{ const files=sc.pages.map((p,i)=>new File([p.blob],`scan-${i+1}.jpg`,{type:"image/jpeg"})); const t=sc.t; S.scan=null; draw(); handleFiles(t,files); };
   const ov=h("div",{class:"overlay scan"},
     h("div",{class:"sheet",role:"dialog","aria-label":"Scan pages"},
-      h("div",{class:"row spread"},h("div",null,h("h2",null,sc.title||"Scan pages"),h("div",{class:"small muted"},`${sc.pages.length} page${sc.pages.length===1?"":"s"} · up to ${lim}`)),h("button",{class:"btn ghost",onclick:close},"Cancel")),
-      h("div",{class:"small muted"},sc.t.mode==="stack"?"Photograph each page in order. Make sure each student's name is on their first page.":"Lay the page flat in good light and fill the screen with it. Photograph the pages in order."),
-      sc.busy?h("span",{class:"pill"},h("span",{class:"spin"}),sc.busy):
-      h("div",{class:"row"},
-        h("button",{class:"btn primary",disabled:sc.pages.length>=lim,onclick:()=>{const c=$("camPick");c.value="";c.click()}},sc.pages.length?"Scan next page":"Scan first page"),
-        h("button",{class:"btn",disabled:sc.pages.length>=lim,onclick:()=>{S.upTarget={scanAdd:true};const f=$("filePick");f.value="";f.click()}},"Add from files")),
+      h("div",{class:"row spread"},h("div",null,h("h2",null,sc.title||"Scan pages"),h("div",{class:"small muted"},`${sc.pages.length} page${sc.pages.length===1?"":"s"} · up to ${lim}${sc.duplex?" sides":""}`)),h("button",{class:"btn ghost",onclick:close},"Cancel")),
+      h("div",{class:"small muted"},(sc.t.mode==="stack"?"Photograph each sheet in order. Make sure each student's name is on their first page. ":"Lay the page flat in good light and fill the screen with it. ")+(sc.duplex?"After each front, flip the sheet and scan the back, or tap Back is blank.":"Photograph the pages in order.")),
+      h("label",{class:"row small"},h("input",{type:"checkbox",id:"scanDuplex",checked:sc.duplex,onchange:e=>{sc.duplex=e.target.checked;sc.needBack=false;draw()}}),"Two-sided sheets (scan front and back)"),
+      sc.busy?h("span",{class:"pill"},h("span",{class:"spin"}),sc.busy):(()=>{
+        const sheets=sc.pages.filter(p=>p.side!=="back").length; const cam=()=>{const c=$("camPick");c.value="";c.click()};
+        return h("div",{class:"row"},
+          sc.duplex&&sc.needBack?[h("button",{class:"btn primary",disabled:sc.pages.length>=lim,onclick:cam},`Scan back of sheet ${sheets}`),
+              h("button",{class:"btn",onclick:()=>{sc.needBack=false;draw()}},"Back is blank")]
+            :h("button",{class:"btn primary",disabled:sc.pages.length>=lim,onclick:cam},sc.duplex?(sheets?`Scan front of sheet ${sheets+1}`:"Scan front of sheet 1"):(sc.pages.length?"Scan next page":"Scan first page")),
+          h("button",{class:"btn",disabled:sc.pages.length>=lim,onclick:()=>{sc.fromFiles=true;S.upTarget={scanAdd:true};const f=$("filePick");f.value="";f.click()}},"Add from files"));})(),
       h("label",{class:"row small"},h("input",{type:"checkbox",id:"scanClean",checked:sc.clean,onchange:e=>{sc.clean=e.target.checked}}),"Clean up photos so they look scanned"),
-      sc.pages.length?h("div",{style:"display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px"},sc.pages.map((p,i)=>h("div",{style:"display:flex;flex-direction:column;gap:4px;min-width:0"},
+      sc.pages.length?h("div",{style:"display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px"},sc.pages.map((p,i,_a,lbl=sheetLabels(sc))=>h("div",{style:"display:flex;flex-direction:column;gap:4px;min-width:0"},
         h("img",{src:p.url,alt:`Page ${i+1}`,style:"width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:var(--sunk)"}),
-        h("div",{class:"row spread small"},h("span",null,`Page ${i+1}`),
+        h("div",{class:"row spread small"},h("span",null,lbl[i]),
           h("span",{class:"row",style:"gap:2px"},
             i>0?h("button",{class:"btn ghost",style:"min-height:30px;padding:2px 6px","aria-label":`Move page ${i+1} earlier`,onclick:()=>{[sc.pages[i-1],sc.pages[i]]=[sc.pages[i],sc.pages[i-1]];draw()}},"↑"):null,
-            h("button",{class:"btn ghost danger",style:"min-height:30px;padding:2px 6px","aria-label":`Remove page ${i+1}`,onclick:()=>{URL.revokeObjectURL(p.url);sc.pages.splice(i,1);draw()}},"✕")))))):
+            h("button",{class:"btn ghost danger",style:"min-height:30px;padding:2px 6px","aria-label":`Remove page ${i+1}`,onclick:()=>{URL.revokeObjectURL(p.url);sc.pages.splice(i,1);sc.needBack=false;draw()}},"✕")))))):
         h("div",{class:"empty"},"No pages yet."),
       h("div",{class:"row"},h("button",{class:"btn primary",disabled:!sc.pages.length||!!sc.busy,onclick:finish},
         {student:"Done, grade this work",stack:"Done, sort and grade",blank:"Done, make the answer sheet","blank-new":"Done, make the answer sheet",rubric:"Done, use this rubric"}[sc.t.mode]||"Done"))));
@@ -750,14 +758,30 @@ async function pdfToJpegs(file,limit){
   return {pages:out,total:pdf.numPages};
 }
 /* Turns picked files into page images (and any typed text). limit caps the page count. */
+/* True when a page has essentially no marks, like the blank back of a one-sided worksheet. */
+async function isBlank(blob){
+  try{
+    const bmp=await createImageBitmap(blob); const k=400/Math.max(bmp.width,bmp.height);
+    const w=Math.max(1,Math.round(bmp.width*k)), hh=Math.max(1,Math.round(bmp.height*k));
+    const cv=document.createElement("canvas"); cv.width=w; cv.height=hh; const ctx=cv.getContext("2d"); ctx.drawImage(bmp,0,0,w,hh);
+    const mx=Math.round(w*0.05), my=Math.round(hh*0.05); /* ignore the outer edge, where scanner shadows sit */
+    const d=ctx.getImageData(mx,my,w-2*mx,hh-2*my).data; const lum=[];
+    for(let i=0;i<d.length;i+=4) lum.push(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
+    const sorted=[...lum].sort((a,b)=>a-b); const paper=sorted[Math.floor(sorted.length*0.6)];
+    let dark=0; for(const v of lum) if(v<paper-55) dark++;
+    return dark/lum.length<0.0015;
+  }catch(e){ return false; }
+}
 async function prepareFiles(files,limit){
-  const blobs=[]; let text="", total=0;
+  const blobs=[]; let text="", total=0, blank=0;
+  const add=async b=>{ if(await isBlank(b)){ blank++; return; } if(blobs.length<limit) blobs.push(b); };
   for(const f of files){
-    if(f.type==="application/pdf"||/\.pdf$/i.test(f.name)){ const r=await pdfToJpegs(f,Math.max(0,limit-blobs.length)); blobs.push(...r.pages); total+=r.total; }
+    if(f.type==="application/pdf"||/\.pdf$/i.test(f.name)){ const r=await pdfToJpegs(f,Math.max(0,limit*2-blobs.length)); for(const b of r.pages) await add(b); total+=r.total; }
     else if(f.type==="text/plain"||/\.txt$/i.test(f.name)) text+=(await f.text()).slice(0,20000)+"\n";
-    else { total++; if(blobs.length<limit) blobs.push(await imageToJpeg(f)); }
+    else { total++; if(blobs.length<limit) await add(await imageToJpeg(f)); }
   }
-  return {blobs,text:text.trim(),total};
+  if(blank) toast(`Skipped ${blank} blank page${blank>1?"s":""} (like empty backs of sheets).`);
+  return {blobs,text:text.trim(),total:total-blank};
 }
 async function uploadPages(blobs){
   const pages=[];
@@ -805,7 +829,7 @@ function keyText(a,lvl){
   if(a.notes) parts.push("Teacher's look-fors:\n"+a.notes);
   return parts.length?parts.join("\n\n"):"No answer sheet was given; work out the correct answers yourself.";
 }
-const HANDWRITING=`Much of it is likely handwritten by a 9–11 year old: read the handwriting carefully, including crossed-out work, work in margins, number models, and drawings (describe drawings and diagrams in words). Mark words you truly cannot read as [illegible]. Write fractions as numerator/denominator, e.g. 3/4 or 2 1/3. Do not penalize handwriting neatness unless a standard is about handwriting.`;
+const HANDWRITING=`Papers are often two-sided, so the images may include the back of a sheet. Check every image, front and back, for student work: answers continued on the back, extra problems, scratch work, drawings and corrections all count toward the grade. Much of it is likely handwritten by a 9–11 year old: read the handwriting carefully, including crossed-out work, work in margins, number models, and drawings (describe drawings and diagrams in words). Mark words you truly cannot read as [illegible]. Write fractions as numerator/denominator, e.g. 3/4 or 2 1/3. Do not penalize handwriting neatness unless a standard is about handwriting.`;
 async function gradeIt(key,blobs,text){
   const sub=S.submissions[key]; const a=S.assignments[sub.assignmentId]; const stu=S.students[sub.studentId]||{}; const stG=Number(stu.grade)||gradesOf(a)[0];
   const myCodes=codesFor(a,stu);
@@ -938,7 +962,7 @@ function answerCard(a){
     c.append(h("div",{class:"row"},h("button",{class:"btn",onclick:()=>keyPdf(a)},a.versions?"Download answer sheets PDF (all 3)":"Download answer sheet PDF"),
       CAP.sample?upBtns({mode:"blank",aid:a.id},"Rebuild from a file","Scan the blank assignment",{scanLabel:"Rebuild from a new scan"}):null));
   } else {
-    c.append(h("div",{class:"small muted"},"Optional. Upload the scanned blank assignment (up to 10 pages) to get an answer sheet to grade against. Without one, papers are still graded and the answers are worked out automatically."),
+    c.append(h("div",{class:"small muted"},"Optional. Upload the scanned blank assignment (up to 10 sheets, front and back) to get an answer sheet to grade against. Without one, papers are still graded and the answers are worked out automatically."),
       h("div",null,upBtns({mode:"blank",aid:a.id},"Upload file","Scan the blank assignment",{disabled:!CAP.sample})));
   }
   return c;
@@ -1039,7 +1063,7 @@ function matchName(n,roster){
 function stackCard(a){
   const busy=S.busy["stack"+a.id];
   return h("div",{class:"card"},h("h3",null,"Upload the whole class at once"),
-    h("div",{class:"small muted"},`Scan the stack of papers into one PDF, or pick many photos. Each student needs their name on their first page. Claude splits the pages by name and grades each paper, up to ${MAX_PAGES} pages per student.`),
+    h("div",{class:"small muted"},`Scan the stack of papers into one PDF, or pick many photos. Each student needs their name on their first page. Claude splits the pages by name and grades each paper, up to 10 sheets per student. Scan front and back; blank backs are skipped.`),
     busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload scanned stack","Scan the class's papers",{disabled:!CAP.sample,primary:true,scanLabel:"Scan the stack"})),
     a.stackNote?h("div",{class:"notice small"},a.stackNote):null);
 }
@@ -1057,7 +1081,7 @@ async function uploadStack(aid,files){
       setBusy(k,`Finding names: pages ${i+1}–${i+chunk.length} of ${blobs.length}`);
       const r=await CAP.sample.json([`These ${chunk.length} images are consecutive scanned pages from a stack of student papers for the assignment "${a.title}".`,
         `Class roster:\n${roster.map(s=>s.name).join("\n")}`,
-        `For each image in order, read the handwritten student name if one is written on that page. Return the matching roster name exactly as listed, or "" if the page has no name or the name matches nobody on the roster. Set "first" to true if the page looks like the first page of a student's assignment (a name line, or the assignment's first question).`,
+        `For each image in order, read the handwritten student name if one is written on that page. Return the matching roster name exactly as listed, or "" if the page has no name or the name matches nobody on the roster. Set "first" to true if the page looks like the first page of a student's assignment (a name line, or the assignment's first question). Papers may be scanned front and back: a page with no name that continues a student's work, holds scratch work, or is the back of a sheet is never a first page, so set "first" to false for it.`,
         `Reply with only a JSON array with one entry per image: [{"page": 1, "student": "Roster Name", "first": true}]`].join("\n\n"),{images:chunk,modelTier:"default"});
       const arr=Array.isArray(r)?r:(r&&Array.isArray(r.pages)?r.pages:[]);
       chunk.forEach((_,j)=>{const it=arr.find(x=>Number(x&&x.page)===j+1)||arr[j]||{}; labels.push({student:String(it.student||""),first:!!it.first})});
