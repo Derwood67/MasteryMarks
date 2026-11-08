@@ -23,7 +23,7 @@
 :root{
   --bg:#EEF2EF; --surface:#FFFFFF; --sunk:#E3E9E5; --ink:#17201C; --muted:#5A6862; --line:#CFD8D3;
   --accent:#1E6A50; --accent-ink:#FFFFFF; --accent-soft:#D6EBE2;
-  --s1:#C0482A; --s2:#B98112; --s3:#2E8A55; --s4:#2D63B4; --on-score:#FFFFFF;
+  --s1:#C0482A; --s2:#B08A06; --s3:#2E8A55; --s4:#2D63B4; --on-score:#FFFFFF;
   --warn-bg:#FFF4D6; --warn-ink:#6E4B00;
   --f-display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --f-body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
@@ -32,12 +32,12 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#101614; --surface:#18201D; --sunk:#222C28; --ink:#E5ECE8; --muted:#9AA8A1; --line:#2F3B36;
   --accent:#5CC39A; --accent-ink:#0C1512; --accent-soft:#1D3A2F;
-  --s1:#E0714F; --s2:#D9A537; --s3:#4DB57C; --s4:#6A9BE8; --on-score:#0C1512;
+  --s1:#D25E3E; --s2:#C29C26; --s3:#3E9E69; --s4:#5C8BDB; --on-score:#0C1512;
   --warn-bg:#3A2F12; --warn-ink:#F2D58A; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#101614; --surface:#18201D; --sunk:#222C28; --ink:#E5ECE8; --muted:#9AA8A1; --line:#2F3B36;
   --accent:#5CC39A; --accent-ink:#0C1512; --accent-soft:#1D3A2F;
-  --s1:#E0714F; --s2:#D9A537; --s3:#4DB57C; --s4:#6A9BE8; --on-score:#0C1512;
+  --s1:#D25E3E; --s2:#C29C26; --s3:#3E9E69; --s4:#5C8BDB; --on-score:#0C1512;
   --warn-bg:#3A2F12; --warn-ink:#F2D58A; color-scheme:dark}
 html,body{background:var(--bg);color:var(--ink)}
 body{font-family:var(--f-body);font-size:16px;line-height:1.45}
@@ -140,6 +140,23 @@ pre.tx{white-space:pre-wrap;font:400 .88rem/1.5 var(--f-body);background:var(--s
 .qmark{flex:none;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;color:var(--on-score)}
 .qi.ok .qmark{background:var(--s3)}
 .qi.no .qmark{background:var(--s1)}
+.chart{display:flex;flex-direction:column;gap:10px}
+.chart h4{margin:0;font:700 .92rem var(--f-body)}
+.hb{display:grid;grid-template-columns:minmax(84px,auto) 1fr 44px;gap:6px 10px;align-items:center;font-size:.85rem}
+.hb .lab{min-width:0;overflow-wrap:anywhere}
+.track{position:relative;height:18px;background:var(--sunk);border-radius:4px}
+.fill{position:absolute;inset:0 auto 0 0;border-radius:0 4px 4px 0;min-width:2px}
+.goal{position:absolute;top:-3px;bottom:-3px;width:0;border-left:2px dashed var(--ink);opacity:.55}
+.hb .val{font-variant-numeric:tabular-nums;text-align:right;font-weight:700}
+.vb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:start;padding-top:8px}
+.vb .col{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;text-align:center}
+.vb .barwrap{height:130px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;border-bottom:1px solid var(--line)}
+.vb .lvl{font-weight:800;font-variant-numeric:tabular-nums}
+.vb .lvn{font-size:.78rem;color:var(--muted);overflow-wrap:anywhere}
+.vb .bar{width:70%;max-width:64px;border-radius:4px 4px 0 0;min-height:2px}
+.vb .n{font-weight:700;font-size:.78rem;font-variant-numeric:tabular-nums}
+.chip-re{display:inline-flex;gap:4px;align-items:center;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--s1);color:var(--on-score)}
+.chip-ok{display:inline-flex;gap:4px;align-items:center;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--sunk);color:var(--muted)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;font-size:.9rem;z-index:30;max-width:calc(100% - 40px)}
 .drop{border:2px dashed var(--line);border-radius:12px;padding:14px;text-align:center;color:var(--muted);font-size:.9rem}
 .drop.on{border-color:var(--accent);background:var(--accent-soft)}
@@ -552,6 +569,107 @@ function itemsView(sub,math,open){
       h("div",{style:"min-width:0"},h("b",null,`${x.n}. `),x.right?"Correct. ":"Let's fix this. ",fr(x.note,math),
         !x.right&&(x.student||x.answer)?h("div",{class:"small muted"},x.student?["You wrote: ",fr(x.student,math)]:null,x.student&&x.answer?"  ·  ":null,x.answer?["Answer: ",fr(x.answer,math)]:null):null)))));
 }
+/* ---------------- class results: graphs and what to reteach ---------------- */
+const GOAL=0.7; /* a standard needs reteaching when fewer than 70% of students score 3 or 4 */
+function resultsData(a){
+  const roster=students(gradesOf(a));
+  const rows=roster.map(st=>({st,sub:S.submissions[a.id+"__"+st.id]})).filter(r=>r.sub&&(r.sub.ai||r.sub.status==="accepted"));
+  const codes=[...new Set(roster.flatMap(st=>codesFor(a,st)))];
+  const stds=codes.map(c=>{ const sc=rows.map(r=>({st:r.st,v:(r.sub.scores||{})[c]})).filter(x=>x.v);
+    const prof=sc.filter(x=>x.v>=3).length; return {c,n:sc.length,prof,pct:sc.length?prof/sc.length:null,avg:sc.length?sc.reduce((t,x)=>t+x.v,0)/sc.length:null,low:sc.filter(x=>x.v<=2).map(x=>x.st.name).sort()}; }).filter(x=>x.n);
+  const levels=[1,2,3,4].map(l=>rows.filter(r=>{const v=avgScore(a,r.st,r.sub);return v!=null&&Math.min(4,Math.max(1,Math.round(v)))===l}).length);
+  const qmap={}; const keyStd={}; for(const l of TIERS){ const k=verOf(a,l).key; if(k&&k.answers) for(const x of k.answers) if(x.std) keyStd[x.n]=x.std; }
+  for(const r of rows) for(const it of ((r.sub.ai&&r.sub.ai.items)||[])){ const q=qmap[it.n]||(qmap[it.n]={n:it.n,right:0,total:0,std:keyStd[it.n]||""}); q.total++; if(it.right) q.right++; }
+  const qs=Object.values(qmap).map(q=>({...q,pct:q.right/q.total})).sort((x,y)=>x.pct-y.pct);
+  const all=rows.map(r=>avgScore(a,r.st,r.sub)).filter(v=>v!=null);
+  return {roster,rows,stds,levels,qs,classAvg:all.length?all.reduce((t,v)=>t+v,0)/all.length:null};
+}
+const pctTxt=p=>Math.round(p*100)+"%";
+function classResults(a){
+  const d=resultsData(a); if(!d.rows.length) return null;
+  const complete=d.rows.length>=d.roster.length&&d.roster.length>0;
+  const reteach=d.stds.filter(x=>x.pct<GOAL).sort((x,y)=>x.pct-y.pct);
+  const missed=d.qs.filter(q=>q.pct<GOAL).slice(0,8);
+  const maxL=Math.max(1,...d.levels);
+  return h("div",{class:"card"},
+    h("div",{class:"row spread"},h("h3",null,"Class results"),h("span",{class:"pill"+(complete?" ok":"")},complete?"Everyone graded":`${d.rows.length} of ${d.roster.length} graded so far`)),
+    !complete?h("div",{class:"small muted"},"These graphs update as each paper is graded. They're final once every student's paper is in."):null,
+    h("div",{class:"row",style:"gap:8px"},d.classAvg!=null?h("span",{class:"pill ok"},`Class average ${d.classAvg.toFixed(1)}`):null,
+      h("span",{class:"pill "+(reteach.length?"rev":"ok")},reteach.length?`${reteach.length} standard${reteach.length>1?"s":""} to reteach`:"No standards need reteaching")),
+    h("div",{class:"chart"},
+      h("h4",null,"Students scoring 3 or 4, by standard"),
+      h("div",{class:"small muted"},`The dashed line is the ${pctTxt(GOAL)} goal. Below it, reteach.`),
+      h("div",{class:"hb",role:"list"},d.stds.map(x=>[
+        h("span",{class:"lab",role:"listitem"},h("span",{class:"code"},x.c)," ",x.pct<GOAL?h("span",{class:"chip-re"},"▲ Reteach"):h("span",{class:"chip-ok"},"✓ On track")),
+        h("div",{class:"track",title:`${x.c}: ${x.prof} of ${x.n} students scored 3 or 4 (average ${x.avg.toFixed(1)})`},
+          h("div",{class:"fill",style:`width:${Math.max(1,x.pct*100)}%;background:${x.pct<GOAL?"var(--s1)":"var(--s3)"}`}),
+          h("div",{class:"goal",style:`left:${GOAL*100}%`,"aria-hidden":"true"})),
+        h("span",{class:"val"},pctTxt(x.pct))]))),
+    reteach.length?h("div",{class:"stdbox",style:"gap:10px;border-left:4px solid var(--s1)"},h("b",null,"What to reteach"),
+      reteach.map(x=>h("div",{class:"small"},h("div",null,h("span",{class:"code"},x.c)," ",h("b",null,`${pctTxt(x.pct)} on target`)," · ",STDTEXT[x.c]||""),
+        x.low.length?h("div",{class:"muted"},`Small group (scored 1 or 2): ${x.low.join(", ")}`):null,
+        (()=>{const qq=d.qs.filter(q=>q.std===x.c&&q.pct<GOAL).map(q=>q.n); return qq.length?h("div",{class:"muted"},`Most missed: question${qq.length>1?"s":""} ${qq.join(", ")}`):null;})()))):null,
+    h("div",{class:"chart"},
+      h("h4",null,"Score spread"),
+      h("div",{class:"vb",role:"list"},[1,2,3,4].map((l,i)=>h("div",{class:"col",role:"listitem",title:`${d.levels[i]} student${d.levels[i]===1?"":"s"} averaged ${l} (${LEVELS[l]})`},
+        h("div",{class:"barwrap"},h("span",{class:"n"},`${d.levels[i]} student${d.levels[i]===1?"":"s"}`),h("div",{class:"bar",style:`height:${(d.levels[i]/maxL)*100}px;background:var(--s${l})`})),
+        h("span",{class:"lvl"},l),h("span",{class:"lvn"},LEVELS[l]))))),
+    missed.length?h("div",{class:"chart"},
+      h("h4",null,"Most-missed questions"),
+      h("div",{class:"hb",role:"list"},missed.map(q=>[
+        h("span",{class:"lab",role:"listitem"},h("b",null,`#${q.n}`),q.std?[" ",h("span",{class:"code"},q.std)]:null),
+        h("div",{class:"track",title:`Question ${q.n}: ${q.right} of ${q.total} correct`},h("div",{class:"fill",style:`width:${Math.max(1,q.pct*100)}%;background:var(--s1)`}),h("div",{class:"goal",style:`left:${GOAL*100}%`,"aria-hidden":"true"})),
+        h("span",{class:"val"},pctTxt(q.pct))]))):null,
+    h("details",null,h("summary",null,"Show as a table"),h("div",{class:"tbl"},h("table",null,
+      h("thead",null,h("tr",null,h("th",null,"Standard"),h("th",null,"Scored 3–4"),h("th",null,"Average"),h("th",null,"Status"))),
+      h("tbody",null,d.stds.map(x=>h("tr",null,h("td",null,x.c),h("td",null,`${x.prof} of ${x.n} (${pctTxt(x.pct)})`),h("td",null,x.avg.toFixed(1)),h("td",null,x.pct<GOAL?"Reteach":"On track"))))))),
+    h("div",{class:"row"},printBtn(()=>resultsPdf(a),"Print class results"),h("button",{class:"btn ghost",onclick:()=>resultsPdf(a)},"Download PDF")));
+}
+async function resultsPdf(a){
+  const d=resultsData(a); if(!d.rows.length){toast("No graded papers yet.");return}
+  try{
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"pt",format:"letter"});
+    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=48, TW=W-2*M; let y=0;
+    const need=n=>{ if(y+n>H-50){ doc.addPage(); y=56; } };
+    const RED=[192,72,42], GRN=[46,138,85], SUNK=[227,233,229], INK=[23,32,28], MUT=[90,104,98];
+    doc.setFillColor(30,106,80); doc.rect(0,0,W,6,"F");
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUT); doc.text([S.settings.school,teacherName()].filter(Boolean).join("  ·  "),M,30);
+    doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(...INK); const tl=doc.splitTextToSize(`Class Results: ${a.title}`,TW); doc.text(tl,M,56); y=56+tl.length*20;
+    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUT);
+    doc.text(`${gradeLabel(a)} ${SUBJ[a.subj]}  ·  ${d.rows.length} of ${d.roster.length} graded${d.classAvg!=null?"  ·  Class average "+d.classAvg.toFixed(1):""}  ·  ${new Date().toLocaleDateString()}`,M,y); y+=28;
+    const hbar=(title,rows)=>{ need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...INK); doc.text(title,M,y); y+=8;
+      doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(...MUT); doc.text(`Dashed line: ${pctTxt(GOAL)} goal`,M,y+8); y+=18;
+      const LX=M+110, BW=TW-110-44;
+      for(const r of rows){ need(24);
+        doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(...INK); doc.text(r.label,M,y+11);
+        if(r.sub){ doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...(r.bad?RED:MUT)); doc.text(r.sub,M,y+20); }
+        doc.setFillColor(...SUNK); doc.roundedRect(LX,y+2,BW,12,3,3,"F");
+        doc.setFillColor(...(r.bad?RED:GRN)); doc.rect(LX,y+2,Math.max(1.5,BW*r.v),12,"F");
+        doc.setDrawColor(...INK); doc.setLineWidth(1); doc.setLineDashPattern([2,2],0); doc.line(LX+BW*GOAL,y-1,LX+BW*GOAL,y+17); doc.setLineDashPattern([],0);
+        doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(...INK); doc.text(pctTxt(r.v),M+TW,y+11,{align:"right"}); y+=26; }
+      y+=8; };
+    hbar("Students scoring 3 or 4, by standard",d.stds.map(x=>({label:x.c,sub:x.pct<GOAL?"RETEACH":"On track",v:x.pct,bad:x.pct<GOAL})));
+    const reteach=d.stds.filter(x=>x.pct<GOAL).sort((x,y)=>x.pct-y.pct);
+    if(reteach.length){ need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...INK); doc.text("What to reteach",M,y); y+=16;
+      for(const x of reteach){ need(50); doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.text(`${x.c}  (${pctTxt(x.pct)} on target)`,M,y); y+=13;
+        doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(...MUT);
+        const lines=[STDTEXT[x.c]||"", x.low.length?`Small group (scored 1 or 2): ${x.low.join(", ")}`:"", (()=>{const qq=d.qs.filter(q=>q.std===x.c&&q.pct<GOAL).map(q=>q.n); return qq.length?`Most missed: ${qq.join(", ")}`:"";})()].filter(Boolean);
+        for(const l of lines) for(const t of doc.splitTextToSize(l,TW)){ need(13); doc.text(t,M,y); y+=12; }
+        doc.setTextColor(...INK); y+=8; } y+=6; }
+    need(170); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...INK); doc.text("Score spread",M,y); y+=12;
+    { const maxL=Math.max(1,...d.levels), CH=110, cw=TW/4, base=y+CH+14; const cols=[[192,72,42],[176,138,6],[46,138,85],[45,99,180]];
+      d.levels.forEach((n,i)=>{ const hgt=Math.max(1.5,CH*n/maxL), x=M+i*cw+cw*0.25, w=cw*0.5;
+        doc.setFillColor(...cols[i]); doc.rect(x,base-hgt,w,hgt,"F");
+        doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(...INK); doc.text(String(n),x+w/2,base-hgt-4,{align:"center"});
+        doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.text(`${i+1} ${LEVELS[i+1]}`,x+w/2,base+12,{align:"center"}); });
+      doc.setDrawColor(200,208,204); doc.setLineWidth(0.6); doc.line(M,base,M+TW,base); y=base+30; }
+    const missed=d.qs.filter(q=>q.pct<GOAL).slice(0,10);
+    if(missed.length) hbar("Most-missed questions",missed.map(q=>({label:`#${q.n}`,sub:q.std||"",v:q.pct,bad:true})));
+    await outPdf(doc,`${a.title.replace(/[^\w ,.-]+/g,"").slice(0,80)} - class results.pdf`);
+    toast("PDF saved.");
+  }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the PDF. Try again."); }
+}
 /* ---------------- Grade papers (the simple path) ---------------- */
 function viewGrade(){
   const g=S.g; const list=Object.values(S.assignments).sort((x,y)=>(y.created||0)-(x.created||0));
@@ -583,7 +701,7 @@ function viewGrade(){
       h("button",{class:"btn primary",onclick:()=>a?startOld(false):startNew(false)},"Upload papers")),
     h("div",{class:"small muted"},"Scan with your phone or tablet camera, or upload a PDF from the copier. Grading starts as soon as the papers are in. Keep this page open while it grades; if it stops, it picks up where it left off next time you open the gradebook."),
     a&&a.stackNote?h("div",{class:"notice small"},a.stackNote):null));
-  if(a){ out.push(gradeResults(a)); const u=unnamedCard(a,false); if(u) out.push(u); }
+  if(a){ out.push(gradeResults(a)); const u=unnamedCard(a,false); if(u) out.push(u); const cr=classResults(a); if(cr) out.push(cr); }
   return out;
 }
 function gradeResults(a){
@@ -791,6 +909,7 @@ function viewAssignment(){
         rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Accepted ${rev.length} grade${rev.length>1?"s":""}.`)}},`Accept all ${rev.length} suggested`):null,
         confirmBtn("delA"+a.id,"Delete assignment",()=>{Object.values(S.submissions).filter(s=>s.assignmentId===a.id).forEach(deleteSub);oldAssets(a);remove("assignments",a.id);S.openA=null;}))),
     a.ws?worksheetCard(a):null,
+    classResults(a),
     unnamedCard(a,true),
     answerCard(a),
     stackCard(a),
@@ -1527,6 +1646,7 @@ function viewWork(){
         printBtn(()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true}),`Print all (${printable.length}) with work, grades and feedback`,"primary"),
         h("button",{class:"btn",onclick:()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true})},"Download PDF")),
       h("div",{class:"small muted"},"Prints in the order shown: each student's grades and your feedback, followed by their scanned pages.")),
+    classResults(a),
     shown.length?h("div",{class:"list"},shown.map(({st,sub,avg})=>{
       const key=a.id+"__"+st.id;
       if(!sub) return h("div",{class:"sub"},h("div",{class:"subhead"},h("span",{class:"name"},st.name),h("span",{class:"pill rev"},"No work turned in"),
@@ -1650,7 +1770,7 @@ async function studentPdf(subs,fname,opts){
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
     const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"pt",format:"letter"});
     const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=48, TW=W-2*M;
-    const SC={1:[192,72,42],2:[185,129,18],3:[46,138,85],4:[45,99,180]}; const T=teacherName();
+    const SC={1:[192,72,42],2:[176,138,6],3:[46,138,85],4:[45,99,180]}; const T=teacherName();
     for(let si=0;si<subs.length;si++){ const sub=subs[si];
       if(opts.pages&&subs.length>1) toast(`Building PDF… ${si+1} of ${subs.length}`);
       const a=S.assignments[sub.assignmentId], st=S.students[sub.studentId]||{name:sub.label||"Unnamed paper",grade:gradesOf(S.assignments[sub.assignmentId])[0]};
@@ -2130,7 +2250,7 @@ async function makePdf(list){
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
     const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"pt",format:"letter"});
-    const SC={1:[192,72,42],2:[185,129,18],3:[46,138,85],4:[45,99,180]}; const set=S.settings; const W=doc.internal.pageSize.getWidth();
+    const SC={1:[192,72,42],2:[176,138,6],3:[46,138,85],4:[45,99,180]}; const set=S.settings; const W=doc.internal.pageSize.getWidth();
     list.forEach((st,si)=>{
       if(si) doc.addPage();
       doc.setFillColor(30,106,80); doc.rect(0,0,W,6,"F");
