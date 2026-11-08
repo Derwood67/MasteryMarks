@@ -569,6 +569,22 @@ function itemsView(sub,math,open){
       h("div",{style:"min-width:0"},h("b",null,`${x.n}. `),x.right?"Correct. ":"Let's fix this. ",fr(x.note,math),
         !x.right&&(x.student||x.answer)?h("div",{class:"small muted"},x.student?["You wrote: ",fr(x.student,math)]:null,x.student&&x.answer?"  ·  ":null,x.answer?["Answer: ",fr(x.answer,math)]:null):null)))));
 }
+/* The paper's calculated grade: its average standards score (1–4) and, when questions were checked, the percent correct. */
+function calcGrade(a,st,sub){
+  const avg=avgScore(a,st||{grade:gradesOf(a)[0]},sub);
+  let right=null,total=null; const it=sub&&sub.ai&&sub.ai.items;
+  if(it&&it.length){ right=it.filter(x=>x.right).length; total=it.length; }
+  else{ const m=String(sub&&sub.ai&&sub.ai.correct||"").match(/(\d+)\s*(?:of|\/)\s*(\d+)/); if(m){ right=+m[1]; total=+m[2]; } }
+  return {avg,lvl:avg!=null?Math.min(4,Math.max(1,Math.round(avg))):null,pct:total?right/total:null,right,total};
+}
+function gradePill(a,st,sub){
+  const g=calcGrade(a,st,sub); if(g.avg==null&&g.pct==null) return null;
+  return h("span",{class:"row",style:"gap:6px;align-items:center",title:"Calculated from this paper's standard scores and correct answers"},
+    h("span",{class:"small muted"},"Calculated grade"),
+    g.avg!=null?h("span",{class:"badge b"+g.lvl},g.avg.toFixed(1)):null,
+    g.avg!=null?h("span",{class:"small"},LEVELS[g.lvl]):null,
+    g.pct!=null?h("span",{class:"pill"},`${Math.round(g.pct*100)}% (${g.right} of ${g.total})`):null);
+}
 /* ---------------- class results: graphs and what to reteach ---------------- */
 const GOAL=0.7; /* a standard needs reteaching when fewer than 70% of students score 3 or 4 */
 function resultsData(a){
@@ -733,7 +749,8 @@ function gradeResults(a){
           sub.status==="review"?h("button",{class:"btn",onclick:()=>{acceptSub(sub);toast(`Saved ${st.name}'s grade.`)}},"Accept"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
-          h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change scores")));
+          h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change scores"),
+          gradePill(a,st,sub)));
     })):null);
 }
 /* ---------------- Assignments ---------------- */
@@ -1668,7 +1685,8 @@ function viewWork(){
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
           h("button",{class:"btn ghost",onclick:()=>{S.viewSub=key;draw()}},"View pages"),
-          h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change grade")));
+          h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change grade"),
+          gradePill(a,st,sub)));
     })):h("div",{class:"card empty"},"No work turned in yet for this assignment.")
   ];
 }
