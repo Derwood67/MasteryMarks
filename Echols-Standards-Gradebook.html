@@ -473,7 +473,7 @@ const draftGrades=()=>draft.grade==="both"?[4,5]:[Number(draft.grade)];
 /* ---------------- grading in progress ---------------- */
 function jobList(){
   return Object.entries(S.busy).map(([k,msg])=>{
-    if(k.startsWith("stack")){ const a=S.assignments[k.slice(5)]; return {k,who:"Whole-class stack",what:a?a.title:"",msg,open:a?{a:a.id}:null}; }
+    if(k.startsWith("stack")){ const a=S.assignments[k.slice(5)]; return {k,who:"Grading the class's papers",what:a?a.title:"",msg,open:a?{a:a.id}:null}; }
     if(k.startsWith("key")){ const id=k.slice(3); const a=S.assignments[id]; return {k,who:"Answer sheet",what:a?a.title:"New assignment",msg,open:a?{a:a.id}:null}; }
     if(/^c[a-z0-9]/.test(k)&&S.custom[k.slice(1)]){ const c=S.custom[k.slice(1)]; return {k,who:"Custom work",what:c.title,msg,open:{c:c.id}}; }
     const [aid,sid]=k.split("__"); const a=S.assignments[aid], st=S.students[sid];
@@ -631,12 +631,19 @@ function newAssignmentForm(){
     h("div",{class:"f"},h("span",{class:"small"},h("b",null,"Core subject")),
       h("div",{class:"chips"},Object.keys(SUBJ).map(k=>h("button",{class:"chip","aria-pressed":String(draft.subj===k),onclick:()=>{draft.subj=k;draft.codes=[];draft.versions=null;draft.ws=null;draw()}},SUBJ[k])))),
     h("div",{class:"f"},h("span",{class:"small"},h("b",null,"How do you want to start?")),
-      h("div",{class:"seg",style:"flex-wrap:wrap"},[["none","Type it in"],["scan","Upload a scan"],["make","Create it for me"]].map(([k,l])=>h("button",{"aria-pressed":String((draft.mode||"none")===k),onclick:()=>{draft.mode=k;draw()}},l)))),
+      h("div",{class:"seg",style:"flex-wrap:wrap"},[["none","Type it in"],["scan","Scan or upload"],["make","Create it for me"]].map(([k,l])=>h("button",{"aria-pressed":String((draft.mode||"none")===k),onclick:()=>{draft.mode=k;draw()}},l)))),
     (draft.mode||"none")==="none"?h("div",{class:"small muted"},"Fill in the details below. You can add a scan later from the assignment page to get an answer sheet."):
     draft.mode==="make"?makePanel():
-    h("div",{class:"drop"},draft.busy?h("span",{class:"row",style:"justify-content:center"},h("span",{class:"spin"}),draft.busy):[
-      h("div",null,"Choose the grade and core subject above first. Then upload the blank assignment as a PDF or photos, up to 10 sheets, front and back. The title, standards and answer sheet are filled in for you."),
-      h("div",{style:"margin-top:10px"},upBtns({mode:"blank-new"},draft.key?"Upload a different file":"Upload file","Scan the blank assignment",{needsClaude:true}))]),
+    draft.busy?h("div",{class:"drop"},h("span",{class:"row",style:"justify-content:center"},h("span",{class:"spin"}),draft.busy)):
+    h("div",{class:"f",style:"gap:12px"},
+      h("div",{class:"stdbox",style:"gap:8px;border:2px solid var(--accent)"},
+        h("b",null,"Students' completed papers: start grading"),
+        h("div",{class:"small"},"Scan or upload the whole class's papers. The answer key is made from them, then every paper is sorted by name and graded. Pick the grade and core subject above first."),
+        h("div",null,upBtns({mode:"papers-new"},"Upload papers","Scan the class's papers",{needsClaude:true,primary:true,scanLabel:"Scan papers and start grading"}))),
+      h("div",{class:"stdbox",style:"gap:8px"},
+        h("b",null,"Blank assignment: answer key only"),
+        h("div",{class:"small"},"Scan or upload a blank copy, up to 10 sheets. The title, standards and answer key are filled in; nothing is graded yet."),
+        h("div",null,upBtns({mode:"blank-new"},draft.key?"Upload a different file":"Upload file","Scan the blank assignment",{needsClaude:true})))),
     draft.key&&draft.mode==="scan"?h("div",{class:"f"},h("span",{class:"small"},h("b",null,`Answer sheet · ${draft.key.answers.length} items`)," · you can edit answers after you create the assignment"),keyTable(draft.key,null)):null,
     h("label",{class:"f"},"Assignment title",h("input",{type:"text",id:"aTitle",value:draft.title,placeholder:"e.g. Fractions exit ticket, Nov 10",oninput:e=>draft.title=e.target.value})),
     h("div",{class:"f"},h("span",{class:"small"},h("b",null,"Standards"),draft.key?" · change any you like.":" · optional. Leave blank and Claude picks them from the scan or the first paper it grades."),cl),
@@ -742,11 +749,12 @@ function handleFiles(t,files){
   else if(t.mode==="blank-new") buildKey(files,null);
   else if(t.mode==="blank") buildKey(files,t.aid);
   else if(t.mode==="stack") uploadStack(t.aid,files);
+  else if(t.mode==="papers-new") startGradingNew(files);
   else if(t.mode==="rubric") prepRubric(files).catch(e=>toast(errMsg(e,"Couldn't read that rubric file.")));
 }
 
 /* ---------------- scan with the camera ---------------- */
-const SCAN_LIMIT={student:MAX_PAGES,"blank-new":MAX_PAGES,blank:MAX_PAGES,rubric:6,stack:300};
+const SCAN_LIMIT={student:MAX_PAGES,"blank-new":MAX_PAGES,blank:MAX_PAGES,rubric:6,stack:300,"papers-new":300};
 function scanFor(t,title){ S.scan={t,title,pages:[],clean:true,duplex:t.mode!=="rubric",needBack:false,busy:""}; draw(); }
 function upBtns(t,uploadLabel,scanTitle,opts){
   opts=opts||{}; const ok=()=>!opts.needsClaude||canClaude(true);
@@ -813,7 +821,7 @@ function drawScanner(){
             h("button",{class:"btn ghost danger",style:"min-height:30px;padding:2px 6px","aria-label":`Remove page ${i+1}`,onclick:()=>{URL.revokeObjectURL(p.url);sc.pages.splice(i,1);sc.needBack=false;draw()}},"✕")))))):
         h("div",{class:"empty"},"No pages yet."),
       h("div",{class:"row"},h("button",{class:"btn primary",disabled:!sc.pages.length||!!sc.busy,onclick:finish},
-        {student:"Done, grade this work",stack:"Done, sort and grade",blank:"Done, make the answer sheet","blank-new":"Done, make the answer sheet",rubric:"Done, use this rubric"}[sc.t.mode]||"Done"))));
+        {student:"Start grading",stack:"Start grading","papers-new":"Start grading",blank:"Done, make the answer sheet","blank-new":"Done, make the answer sheet",rubric:"Done, use this rubric"}[sc.t.mode]||"Done"))));
   document.body.append(ov);
 }
 
@@ -1147,11 +1155,39 @@ function matchName(n,roster){
   const first=roster.filter(r=>r.name.toLowerCase().split(/\s+/)[0]===s.split(/\s+/)[0]);
   return first.length===1?first[0]:null;
 }
+/* Builds the teacher answer key from students' completed papers: the questions are read, student answers ignored, and every item solved. */
+async function keyFromPapers(aid,imgs){
+  const a=S.assignments[aid]; const grades=gradesOf(a), subj=a.subj;
+  const r=await CAP.sample.json([`You are making a teacher's answer key for a North Carolina grade ${grades.join(" and ")} ${SUBJ[subj]} assignment.`,
+    `The attached images are scanned pages of students' completed copies of the assignment (possibly from more than one student). Read the questions themselves and IGNORE every student answer: students make mistakes. Solve every question yourself, correctly.`,
+    `Give the correct answer for every question or task. Write fractions as numerator/denominator with no spaces (e.g. 3/4, 2 1/3). For open-ended items (explain, write, draw), state what a full-credit answer must include.`,
+    a.codes.length?`The assignment assesses: ${a.codes.join(", ")}. Tag each question with the one of these it assesses.`:`Also choose the NC standards it best assesses (1–4${grades.length>1?" for each grade":""}), using ONLY codes from this list:\n${grades.map(g=>`Grade ${g}:\n`+candidateList(g,subj)).join("\n\n")}`,
+    `Reply with only this JSON object:\n{"title": "short assignment title", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the standard code this question assesses"}]}`].join("\n\n"),{images:imgs,modelTier:"default"});
+  const answers=(Array.isArray(r&&r.answers)?r.answers:[]).slice(0,80).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),question:String(x&&x.question||"").slice(0,200),answer:String(x&&x.answer||"").slice(0,400),notes:String(x&&x.notes||"").slice(0,300),std:String(x&&x.std||"").slice(0,20)}));
+  if(!answers.length) throw new Error("no questions");
+  const cur=S.assignments[aid];
+  const valid=new Set(grades.flatMap(g=>flat(g,subj).map(x=>x[0])));
+  let codes=cur.codes, codesAuto=cur.codesAuto;
+  if(!codes.length){ codes=[...new Set((Array.isArray(r&&r.codes)?r.codes:[]).map(String).filter(c=>valid.has(c)))].slice(0,4*grades.length); codesAuto=true; }
+  const key={answers:answers.map(x=>({...x,std:codes.includes(x.std)?x.std:""})),madeAt:Date.now(),fromPapers:true};
+  put("assignments",aid,{...cur,codes,codesAuto,key,title:cur.autoTitle&&r.title?String(r.title).slice(0,120):cur.title,autoTitle:cur.autoTitle&&!r.title});
+}
+/* New assignment straight from a stack of student papers: create it, make the key, sort and grade. */
+async function startGradingNew(files){
+  const grades=draftGrades(); if(!students(grades).length){ toast(`Add your ${grades.length>1?"grade 4 and 5":"grade "+grades[0]} students on the Class tab first.`); return; }
+  const id="a"+uid(); const title=draft.title.trim();
+  put("assignments",id,{id,title:title||`Scanned assignment, ${new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"})}`,autoTitle:!title,
+    grade:grades[0],grades,subj:draft.subj,codes:[...draft.codes],notes:draft.notes.trim(),key:null,pages:[],created:Date.now()});
+  draft={title:"",grade:draft.grade,subj:draft.subj,codes:[],notes:"",key:null,pages:[],busy:"",mode:draft.mode}; showNew=false;
+  S.tab="assign"; S.openA=id; draw(); scrollTo(0,0);
+  toast("Grading started. Watch it with Grading in progress at the top.",3000);
+  await uploadStack(id,files);
+}
 function stackCard(a){
   const busy=S.busy["stack"+a.id];
-  return h("div",{class:"card"},h("h3",null,"Upload the whole class at once"),
-    h("div",{class:"small muted"},`Scan the stack of papers into one PDF, or pick many photos. Each student needs their name on their first page. Claude splits the pages by name and grades each paper, up to 10 sheets per student. Scan front and back; blank backs are skipped.`),
-    busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload scanned stack","Scan the class's papers",{needsClaude:true,primary:true,scanLabel:"Scan the stack"})),
+  return h("div",{class:"card",style:"border:2px solid var(--accent)"},h("h3",null,"Start grading"),
+    h("div",{class:"small muted"},`${a.key?"":"No answer key yet, so one is made from the papers first. "}Scan the class's papers, or upload them as one PDF or many photos. Each student needs their name on their first page. The pages are sorted by name and each paper is graded, up to 10 sheets per student. Scan front and back; blank backs are skipped.`),
+    busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload papers","Scan the class's papers",{needsClaude:true,primary:true,scanLabel:"Scan papers and start grading"})),
     a.stackNote?h("div",{class:"notice small"},a.stackNote):null);
 }
 async function uploadStack(aid,files){
@@ -1162,6 +1198,11 @@ async function uploadStack(aid,files){
     const cap=Math.min(300,roster.length*MAX_PAGES+20);
     const {blobs,total}=await prepareFiles(files,cap);
     if(!blobs.length) throw new Error("No pages found in those files.");
+    if(!(S.assignments[aid].key&&S.assignments[aid].key.answers&&S.assignments[aid].key.answers.length)){
+      setBusy(k,"Making the answer key from the papers…");
+      try{ await keyFromPapers(aid,blobs.slice(0,CAP.imgMax)); }
+      catch(e){ toast("Couldn't make an answer key from the papers, so grading will work out the answers itself."); }
+    }
     const labels=[];
     for(let i=0;i<blobs.length;i+=CAP.imgMax){
       const chunk=blobs.slice(i,i+CAP.imgMax);
