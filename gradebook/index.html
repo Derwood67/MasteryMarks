@@ -487,6 +487,7 @@ const draftGrades=()=>draft.grade==="both"?[4,5]:[Number(draft.grade)];
 /* ---------------- grading in progress ---------------- */
 function jobList(){
   return Object.entries(S.busy).map(([k,msg])=>{
+    if(k==="blankclean") return {k,who:"Removing blank pages",what:"",msg,open:{tab:"arch"}};
     if(k.startsWith("stack")){ const a=S.assignments[k.slice(5)]; return {k,who:"Grading the class's papers",what:a?a.title:"",msg,open:a?{a:a.id}:null}; }
     if(k.startsWith("key")){ const id=k.slice(3); const a=S.assignments[id]; return {k,who:"Answer sheet",what:a?a.title:"New assignment",msg,open:a?{a:a.id}:null}; }
     if(/^c[a-z0-9]/.test(k)&&S.custom[k.slice(1)]){ const c=S.custom[k.slice(1)]; return {k,who:"Custom work",what:c.title,msg,open:{c:c.id}}; }
@@ -948,11 +949,13 @@ async function isBlank(blob){
     const w=Math.max(1,Math.round(bmp.width*k)), hh=Math.max(1,Math.round(bmp.height*k));
     const cv=document.createElement("canvas"); cv.width=w; cv.height=hh; const ctx=cv.getContext("2d"); ctx.drawImage(bmp,0,0,w,hh);
     const mx=Math.round(w*0.05), my=Math.round(hh*0.05); /* ignore the outer edge, where scanner shadows sit */
-    const d=ctx.getImageData(mx,my,w-2*mx,hh-2*my).data; const lum=[];
-    for(let i=0;i<d.length;i+=4) lum.push(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
-    const sorted=[...lum].sort((a,b)=>a-b); const paper=sorted[Math.floor(sorted.length*0.6)];
-    let dark=0; for(const v of lum) if(v<paper-55) dark++;
-    return dark/lum.length<0.0015;
+    const iw=w-2*mx, ih=hh-2*my; const d=ctx.getImageData(mx,my,iw,ih).data; const lum=new Float32Array(iw*ih);
+    for(let i=0,j=0;i<d.length;i+=4,j++) lum[j]=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;
+    const sorted=Array.from(lum).sort((a,b)=>a-b); const paper=sorted[Math.floor(sorted.length*0.6)];
+    /* Writing shows up as many rows with several dark pixels; scanner specks and show-through from the other side don't. */
+    let dark=0, inkRows=0;
+    for(let yy=0;yy<ih;yy++){ let n=0; for(let xx=0;xx<iw;xx++){ if(lum[yy*iw+xx]<paper-55){ n++; dark++; } } if(n>=4) inkRows++; }
+    return inkRows<5||dark/lum.length<0.0008;
   }catch(e){ return false; }
 }
 async function prepareFiles(files,limit){
@@ -1465,6 +1468,24 @@ function viewWork(){
     })):h("div",{class:"card empty"},"No work turned in yet for this assignment.")
   ];
 }
+/* Removes blank pages from every saved paper, assignment scan and rubric. */
+async function removeBlankPages(){
+  if(S.busy.blankclean) return;
+  setBusy("blankclean","Checking saved pages for blank ones…"); let removed=0, checked=0;
+  try{
+    const fix=async (col,rec,field)=>{
+      const pages=rec[field]||[]; if(!pages.length) return; const keep=[];
+      for(const p of pages){ checked++; let blank=false;
+        try{ const r=await fetch(pageSrc(p)); if(r.ok) blank=await isBlank(await r.blob()); }catch(e){}
+        if(blank){ removed++; if(p.asset&&CAP.assets) CAP.assets.delete(p.asset).catch(()=>{}); } else keep.push(p); }
+      if(keep.length!==pages.length) put(col,rec.id,{...S[col][rec.id],[field]:keep});
+    };
+    for(const sub of Object.values(S.submissions)) await fix("submissions",sub,"pages");
+    for(const a of Object.values(S.assignments)) await fix("assignments",a,"pages");
+    for(const c of Object.values(S.custom)) await fix("custom",c,"rubricPages");
+    toast(removed?`Removed ${removed} blank page${removed>1?"s":""} out of ${checked} checked.`:checked?`No blank pages found in ${checked} saved pages.`:"There are no saved pages yet.");
+  }finally{ setBusy("blankclean",null); }
+}
 /* ---------------- Archive ---------------- */
 function viewArchive(){
   const f=S.arch; const q=f.q.trim().toLowerCase();
@@ -1473,6 +1494,8 @@ function viewArchive(){
     .sort((a,b)=>(b.submittedAt||0)-(a.submittedAt||0));
   return [
     h("div",{class:"row spread"},h("h2",null,"Archive"),h("span",{class:"small muted"},`${subs.length} submission${subs.length===1?"":"s"}`)),
+    h("div",{class:"row"},S.busy.blankclean?h("span",{class:"pill"},h("span",{class:"spin"}),S.busy.blankclean):h("button",{class:"btn",onclick:removeBlankPages},"Remove blank pages"),
+      h("span",{class:"small muted"},"Blank pages are skipped on upload. This also clears any already saved.")),
     h("div",{class:"grid2"},
       h("label",{class:"f"},"Student",h("select",{id:"archStu",onchange:e=>{f.student=e.target.value;draw()}},h("option",{value:""},"All students"),students().map(s=>h("option",{value:s.id,selected:s.id===f.student},`${s.name} (Gr ${s.grade})`)))),
       h("label",{class:"f"},"Search",h("input",{type:"text",id:"archQ",value:f.q,placeholder:"Assignment or student name",oninput:e=>{f.q=e.target.value;clearTimeout(window._aq);window._aq=setTimeout(()=>{const p=e.target.selectionStart;draw();const i=$("archQ");i.focus();i.setSelectionRange(p,p)},300)}}))),
