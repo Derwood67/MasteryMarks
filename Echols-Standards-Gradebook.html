@@ -395,8 +395,8 @@ const badge=v=>h("span",{class:"badge b"+(v||0),title:v?LEVELS[v]:"Not graded"},
 const byName=(a,b)=>a.name.localeCompare(b.name);
 
 /* ---------------- state + storage ---------------- */
-const S={students:{},assignments:{},submissions:{},rosters:{},custom:{},openC:null,settings:{school:"Morehead Montessori Elementary School",teacher:"Mr. Echols",term:""},
-  tab:"grade", openA:null, g:{aid:"new",grade:4,subj:"math",title:""}, gb:{grade:4,subj:"ela",code:null}, arch:{student:"",q:""}, rep:{grade:"all",student:"all",ungraded:false},
+const S={students:{},assignments:{},submissions:{},rosters:{},custom:{},batches:{},openC:null,settings:{school:"Morehead Montessori Elementary School",teacher:"Mr. Echols",term:""},
+  tab:"grade", openA:null, g:{aid:"new",grade:4,subj:"auto",title:""}, gb:{grade:4,subj:"ela",code:null}, arch:{student:"",q:""}, rep:{grade:"all",student:"all",ungraded:false},
   busy:{}, upTarget:null, viewSub:null, confirm:null};
 const CAP={db:null,assets:null,sample:null,downloads:null,imgMax:8,imgOK:true,ready:false};
 /* Says why a Claude step can't run here; returns true when it can. */
@@ -407,8 +407,8 @@ function canClaude(photos){
   return true;
 }
 const LS="gradebook-local-v1";
-function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LS)||"null");if(d){for(const k of ["students","assignments","submissions","rosters","custom"])S[k]=d[k]||{};if(d.settings)S.settings=d.settings}}catch(e){}}
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({students:S.students,assignments:S.assignments,submissions:S.submissions,rosters:S.rosters,custom:S.custom,settings:S.settings}))}catch(e){}}
+function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LS)||"null");if(d){for(const k of ["students","assignments","submissions","rosters","custom","batches"])S[k]=d[k]||{};if(d.settings)S.settings=d.settings}}catch(e){}}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({students:S.students,assignments:S.assignments,submissions:S.submissions,rosters:S.rosters,custom:S.custom,batches:S.batches,settings:S.settings}))}catch(e){}}
 const wq={}, dirty=new Set();
 function put(col,id,data){
   if(col==="settings") S.settings=data; else S[col][id]=data;
@@ -444,7 +444,7 @@ function subscribe(col){
     const next={};
     for(const d of snap.docs){const p=col+"/"+d.id; next[d.id]=dirty.has(p)&&S[col][d.id]?S[col][d.id]:{...d.data(),id:d.id}}
     for(const p of dirty){const [c,id]=p.split("/"); if(c===col&&S[col][id]&&!next[id]) next[id]=S[col][id]}
-    S[col]=next; render();
+    S[col]=next; render(); if(col==="batches"&&!snap.metadata.fromCache) setTimeout(maybeAutoResume,1500);
   },e=>{clearTimeout(t);$("status").textContent="Saved data unavailable"});
 }
 
@@ -476,6 +476,27 @@ const gradeLabel=a=>gradesOf(a).length>1?"Grades 4 & 5":"Grade "+gradesOf(a)[0];
 const codesFor=(a,st)=>{ if(!st) return a.codes; const c=a.codes.filter(x=>STDGRADE[x]==st.grade); return c.length||gradesOf(a).length>1?c:a.codes; };
 const draftGrades=()=>draft.grade==="both"?[4,5]:[Number(draft.grade)];
 
+/* Calls Claude, waiting and retrying when it's busy or the connection drops, so long stacks keep going. */
+async function sampleJson(prompt,opts,onWait){
+  const waits=[15,30,60,90,120];
+  for(let i=0;;i++){
+    try{ return await CAP.sample.json(prompt,opts); }
+    catch(e){
+      const code=e&&e.code; const retry=code==="rate_limited"||code==="unavailable"||code==="timeout"||code==="network"||code==="overloaded"||!code;
+      if(!retry||i>=waits.length) throw e;
+      const w=waits[i]; if(onWait) onWait(w); else toast(`Claude is busy. Trying again in ${w} seconds…`,2500);
+      await new Promise(r=>setTimeout(r,w*1000));
+    }
+  }
+}
+/* Keeps the screen on while grading, where the device allows it. */
+let wakeLock=null, wakeUsers=0;
+async function holdAwake(on){
+  wakeUsers=Math.max(0,wakeUsers+(on?1:-1));
+  try{ if(wakeUsers>0&&!wakeLock&&navigator.wakeLock){ wakeLock=await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release",()=>{wakeLock=null}); }
+       if(wakeUsers===0&&wakeLock){ await wakeLock.release(); wakeLock=null; } }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&wakeUsers>0&&!wakeLock) { wakeUsers--; holdAwake(true); } });
 /* ---------------- grading in progress ---------------- */
 function jobList(){
   return Object.entries(S.busy).map(([k,msg])=>{
@@ -533,7 +554,7 @@ function viewGrade(){
     draft.grade=g.grade; draft.subj=g.subj; draft.title=g.title||""; draft.codes=[]; draft.notes="";
     if(scan) scanFor({mode:"papers-new"},"Scan the class's papers"); else pickMode({mode:"papers-new"}); };
   const startOld=scan=>{ if(!canClaude(true)) return; if(scan) scanFor({mode:"stack",aid:a.id},"Scan the class's papers"); else pickMode({mode:"stack",aid:a.id}); };
-  const out=[h("h2",null,"Grade papers"),
+  const out=[h("h2",null,"Grade papers"),resumeCard(),
     h("div",{class:"small muted"},"Three steps. Names on papers sort them to the right student; papers without a name are graded too. Fronts and backs are both checked.")];
   if((!CAP.sample||!CAP.imgOK)&&CAP.ready) out.push(h("div",{class:"notice small"},!CAP.sample?"Grading works when the gradebook is opened from its Claude link (claude.ai or the Claude app).":"This view can't send photos to Claude. Open the gradebook on claude.ai in a web browser to grade."));
   out.push(h("div",{class:"card"},
@@ -543,7 +564,7 @@ function viewGrade(){
       list.map(x=>h("option",{value:x.id,selected:x.id===g.aid},`${x.title} · ${gradeLabel(x)} ${SUBJ[x.subj]}`))),
     a?h("div",{class:"small muted"},a.key&&a.key.answers&&a.key.answers.length?`Uses your answer key (${a.key.answers.length} answers).`:"An answer key will be made from the papers."):
     [h("div",{class:"seg",style:"flex-wrap:wrap"},[[4,"Grade 4"],[5,"Grade 5"],["both","Grades 4 & 5"]].map(([v,l])=>h("button",{"aria-pressed":String(g.grade==v),onclick:()=>{g.grade=v;draw()}},l))),
-     h("div",{class:"chips"},Object.keys(SUBJ).map(k=>h("button",{class:"chip","aria-pressed":String(g.subj===k),onclick:()=>{g.subj=k;draw()}},SUBJ[k]))),
+     h("div",{class:"chips"},[["auto","Figure it out from the papers"],...Object.entries(SUBJ)].map(([k,l])=>h("button",{class:"chip","aria-pressed":String(g.subj===k),onclick:()=>{g.subj=k;draw()}},l))),
      h("input",{type:"text",id:"gTitle",value:g.title,placeholder:"Name it (optional), e.g. Fractions quiz",oninput:e=>g.title=e.target.value}),
      h("div",{class:"small muted"},"The answer key is made from the papers. You can check it afterward.")]),
   h("div",{class:"card"},
@@ -552,7 +573,7 @@ function viewGrade(){
     h("div",{class:"row"},
       h("button",{class:"btn primary",onclick:()=>a?startOld(true):startNew(true)},"Scan papers"),
       h("button",{class:"btn primary",onclick:()=>a?startOld(false):startNew(false)},"Upload papers")),
-    h("div",{class:"small muted"},"Scan with your phone or tablet camera, or upload a PDF from the copier. Grading starts as soon as the papers are in."),
+    h("div",{class:"small muted"},"Scan with your phone or tablet camera, or upload a PDF from the copier. Grading starts as soon as the papers are in. Keep this page open while it grades; if it stops, it picks up where it left off next time you open the gradebook."),
     a&&a.stackNote?h("div",{class:"notice small"},a.stackNote):null));
   if(a){ out.push(gradeResults(a)); const u=unnamedCard(a,false); if(u) out.push(u); }
   return out;
@@ -685,6 +706,7 @@ async function regradeAll(aid){
 function viewAssignments(){
   const out=[];
   if((!CAP.sample||!CAP.imgOK)&&CAP.ready) out.push(h("div",{class:"notice"},!CAP.sample?"Automatic grading, answer sheets and writing assignments work when the gradebook is opened from its Claude link. Uploading, scanning and scoring by hand work here.":"This view can't send photos to Claude, so uploaded papers are saved but not graded automatically. Open the gradebook on claude.ai in a web browser to grade them."));
+  { const rc=resumeCard(); if(rc) out.push(rc); }
   out.push(h("div",{class:"row spread"},h("h2",null,"Assignments"),h("button",{class:"btn primary",onclick:()=>{showNew=!showNew;draw()}},showNew?"Close":"New assignment")));
   if(showNew) out.push(newAssignmentForm());
   const list=Object.values(S.assignments).sort((a,b)=>(b.created||0)-(a.created||0));
@@ -1028,7 +1050,7 @@ Include one entry in "items" for every question, in order. Feedback notes speak 
       const prompt=[intro, blobs.length?`The ${blobs.length} attached image(s) are ALL the pages of this one student's work, in order. ${HANDWRITING}`:"",
         text?`Typed work from the student:\n"""\n${text.slice(0,15000)}\n"""`:"", rubric,
         `Reply with only this JSON object:\n{"transcript": "the student's answers transcribed question by question, each starting with its number, with a blank line between questions, max 2500 characters", "legibility": "clear" | "partly" | "hard", ${shape.slice(1)}`].filter(Boolean).join("\n\n");
-      r=await CAP.sample.json(prompt,{images:blobs.length?blobs:undefined,modelTier:"default"});
+      r=await sampleJson(prompt,{images:blobs.length?blobs:undefined,modelTier:"default"});
       transcript=String(r&&r.transcript||""); legibility=String(r&&r.legibility||"");
     } else {
       /* More pages than one request can carry: read them in batches, then score the whole transcript. */
@@ -1036,7 +1058,7 @@ Include one entry in "items" for every question, in order. Feedback notes speak 
       for(let i=0;i<blobs.length;i+=CAP.imgMax){
         const chunk=blobs.slice(i,i+CAP.imgMax);
         setBusy(key,`Reading pages ${i+1}–${i+chunk.length} of ${blobs.length}…`);
-        const t=await CAP.sample.json([`These ${chunk.length} images are pages ${i+1}–${i+chunk.length} of a ${blobs.length}-page assignment ("${a.title}", grade ${stG}) completed by one student.`,
+        const t=await sampleJson([`These ${chunk.length} images are pages ${i+1}–${i+chunk.length} of a ${blobs.length}-page assignment ("${a.title}", grade ${stG}) completed by one student.`,
           `Transcribe everything the student wrote or drew, question by question, keeping the question numbers and putting a blank line between questions. ${HANDWRITING}`,
           `Reply with only this JSON object: {"pages": [{"page": ${i+1}, "text": "transcription of that page"}], "legibility": "clear" | "partly" | "hard"}`].join("\n\n"),{images:chunk,modelTier:"default"});
         const ps=Array.isArray(t&&t.pages)?t.pages:[];
@@ -1046,7 +1068,7 @@ Include one entry in "items" for every question, in order. Feedback notes speak 
       transcript=parts.join("\n\n");
       legibility=legs.includes("hard")?"hard":legs.includes("partly")?"partly":"clear";
       setBusy(key,"Scoring the whole assignment…");
-      r=await CAP.sample.json([intro,`Below is a transcription of all ${blobs.length} pages of this one student's work.\n"""\n${transcript.slice(0,30000)}\n"""`,
+      r=await sampleJson([intro,`Below is a transcription of all ${blobs.length} pages of this one student's work.\n"""\n${transcript.slice(0,30000)}\n"""`,
         text?`Typed work from the student:\n"""\n${text.slice(0,10000)}\n"""`:"", rubric, `Reply with only this JSON object:\n${shape}`].filter(Boolean).join("\n\n"),{modelTier:"default"});
     }
     let codes=myCodes;
@@ -1093,7 +1115,7 @@ async function buildKey(files,aid){
       const ps=[];
       for(let i=CAP.imgMax;i<blobs.length;i+=CAP.imgMax){
         const chunk=blobs.slice(i,i+CAP.imgMax); setB(`Reading pages ${i+1}–${i+chunk.length}…`);
-        const t=await CAP.sample.json(`These images are pages ${i+1}–${i+chunk.length} of a grade ${grade} assignment. Transcribe every question exactly, with its number, and describe any diagrams. Reply with only JSON: {"text": "..."}`,{images:chunk,modelTier:"default"});
+        const t=await sampleJson(`These images are pages ${i+1}–${i+chunk.length} of a grade ${grade} assignment. Transcribe every question exactly, with its number, and describe any diagrams. Reply with only JSON: {"text": "..."}`,{images:chunk,modelTier:"default"});
         ps.push(`--- Pages ${i+1}–${i+chunk.length} ---\n${String(t&&t.text||"")}`);
       }
       pageText=ps.join("\n\n");
@@ -1107,7 +1129,7 @@ async function buildKey(files,aid){
       `Give the correct answer for every question or task. Write fractions as numerator/denominator with no spaces (e.g. 3/4, 2 1/3). For open-ended items (explain, write, draw), state what a full-credit answer must include.`,
       `This is a ${SUBJ[subj]} assignment. Also choose the NC standards it best assesses (1–4${grades.length>1?" for each grade":""}), using ONLY codes from this list:\n${grades.map(g=>`Grade ${g}:\n`+candidateList(g,subj)).join("\n\n")}`,
       `Reply with only this JSON object:\n{"title": "short assignment title", "subject": "ela" | "math" | "sci" | "ss", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the one code from your codes list this question assesses"}]}`].filter(Boolean).join("\n\n");
-    const r=await CAP.sample.json(prompt,{images:imgs.length?imgs:undefined,modelTier:"default"});
+    const r=await sampleJson(prompt,{images:imgs.length?imgs:undefined,modelTier:"default"});
     const answers=(Array.isArray(r&&r.answers)?r.answers:[]).slice(0,80).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),question:String(x&&x.question||"").slice(0,200),answer:String(x&&x.answer||"").slice(0,400),notes:String(x&&x.notes||"").slice(0,300),std:String(x&&x.std||"").slice(0,20)}));
     if(!answers.length) throw new Error("Claude couldn't find any questions on those pages. Try a clearer scan.");
     const key={answers,madeAt:Date.now()};
@@ -1245,27 +1267,29 @@ function matchName(n,roster){
 }
 /* Builds the teacher answer key from students' completed papers: the questions are read, student answers ignored, and every item solved. */
 async function keyFromPapers(aid,imgs){
-  const a=S.assignments[aid]; const grades=gradesOf(a), subj=a.subj;
-  const r=await CAP.sample.json([`You are making a teacher's answer key for a North Carolina grade ${grades.join(" and ")} ${SUBJ[subj]} assignment.`,
+  const a=S.assignments[aid]; const grades=gradesOf(a); const auto=!!a.subjAuto; let subj=a.subj;
+  const r=await sampleJson([`You are making a teacher's answer key for a North Carolina grade ${grades.join(" and ")} ${auto?"":SUBJ[subj]+" "}assignment.`,
+    auto?`First decide which core subject it is: "ela", "math", "sci" or "ss".`:"",
     `The attached images are scanned pages of students' completed copies of the assignment (possibly from more than one student). Read the questions themselves and IGNORE every student answer: students make mistakes. Solve every question yourself, correctly.`,
     `Give the correct answer for every question or task. Write fractions as numerator/denominator with no spaces (e.g. 3/4, 2 1/3). For open-ended items (explain, write, draw), state what a full-credit answer must include.`,
-    a.codes.length?`The assignment assesses: ${a.codes.join(", ")}. Tag each question with the one of these it assesses.`:`Also choose the NC standards it best assesses (1–4${grades.length>1?" for each grade":""}), using ONLY codes from this list:\n${grades.map(g=>`Grade ${g}:\n`+candidateList(g,subj)).join("\n\n")}`,
-    `Reply with only this JSON object:\n{"title": "short assignment title", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the standard code this question assesses"}]}`].join("\n\n"),{images:imgs,modelTier:"default"});
+    a.codes.length&&!auto?`The assignment assesses: ${a.codes.join(", ")}. Tag each question with the one of these it assesses.`:`Also choose the NC standards it best assesses (1–4${grades.length>1?" for each grade":""}), using ONLY codes from this list${auto?" for the subject you chose":""}:\n${grades.map(g=>`Grade ${g}:\n`+candidateList(g,auto?null:subj)).join("\n\n")}`,
+    `Reply with only this JSON object:\n{"title": "short assignment title", "subject": "ela" | "math" | "sci" | "ss", "codes": ["..."], "answers": [{"n": "1", "question": "the question in 15 words or fewer", "answer": "the correct answer", "notes": "acceptable variations or what full credit needs, or empty", "std": "the standard code this question assesses"}]}`].join("\n\n"),{images:imgs,modelTier:"default"});
   const answers=(Array.isArray(r&&r.answers)?r.answers:[]).slice(0,80).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),question:String(x&&x.question||"").slice(0,200),answer:String(x&&x.answer||"").slice(0,400),notes:String(x&&x.notes||"").slice(0,300),std:String(x&&x.std||"").slice(0,20)}));
   if(!answers.length) throw new Error("no questions");
   const cur=S.assignments[aid];
+  if(auto&&SUBJ[r&&r.subject]) subj=r.subject;
   const valid=new Set(grades.flatMap(g=>flat(g,subj).map(x=>x[0])));
-  let codes=cur.codes, codesAuto=cur.codesAuto;
+  let codes=auto?[]:cur.codes, codesAuto=cur.codesAuto;
   if(!codes.length){ codes=[...new Set((Array.isArray(r&&r.codes)?r.codes:[]).map(String).filter(c=>valid.has(c)))].slice(0,4*grades.length); codesAuto=true; }
   const key={answers:answers.map(x=>({...x,std:codes.includes(x.std)?x.std:""})),madeAt:Date.now(),fromPapers:true};
-  put("assignments",aid,{...cur,codes,codesAuto,key,title:cur.autoTitle&&r.title?String(r.title).slice(0,120):cur.title,autoTitle:cur.autoTitle&&!r.title});
+  put("assignments",aid,{...cur,subj,subjAuto:false,codes,codesAuto,key,title:cur.autoTitle&&r.title?String(r.title).slice(0,120):cur.title,autoTitle:cur.autoTitle&&!r.title});
 }
 /* New assignment straight from a stack of student papers: create it, make the key, sort and grade. */
 async function startGradingNew(files){
   const grades=draftGrades();
   const id="a"+uid(); const title=draft.title.trim();
   put("assignments",id,{id,title:title||`Scanned assignment, ${new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"})}`,autoTitle:!title,
-    grade:grades[0],grades,subj:draft.subj,codes:[...draft.codes],notes:draft.notes.trim(),key:null,pages:[],created:Date.now()});
+    grade:grades[0],grades,subj:draft.subj==="auto"?"ela":draft.subj,subjAuto:draft.subj==="auto",codes:[...draft.codes],notes:draft.notes.trim(),key:null,pages:[],created:Date.now()});
   draft={title:"",grade:draft.grade,subj:draft.subj,codes:[],notes:"",key:null,pages:[],busy:"",mode:draft.mode}; showNew=false;
   if(S.tab==="grade"){ S.g.aid=id; draw(); } else { S.tab="assign"; S.openA=id; draw(); scrollTo(0,0); }
   toast("Grading started. Watch it with Grading in progress at the top.",3000);
@@ -1278,51 +1302,102 @@ function stackCard(a){
     busy?h("span",{class:"pill"},h("span",{class:"spin"}),busy):h("div",null,upBtns({mode:"stack",aid:a.id},"Upload papers","Scan the class's papers",{needsClaude:true,primary:true,scanLabel:"Scan papers and start grading"})),
     a.stackNote?h("div",{class:"notice small"},a.stackNote):null);
 }
+/* A stack upload is saved as a batch first (pages, then names, then one paper at a time), so grading picks up where it stopped. */
 async function uploadStack(aid,files){
-  const k="stack"+aid; const a=S.assignments[aid]; const roster=students(gradesOf(a));
+  const k="stack"+aid;
   try{
     setBusy(k,"Preparing pages…");
-    const cap=300;
-    const {blobs,total}=await prepareFiles(files,cap);
+    const {blobs,total}=await prepareFiles(files,300);
     if(!blobs.length) throw new Error("No pages found in those files.");
-    if(!(S.assignments[aid].key&&S.assignments[aid].key.answers&&S.assignments[aid].key.answers.length)){
+    const a=S.assignments[aid];
+    if(!(a.key&&a.key.answers&&a.key.answers.length)||a.subjAuto){
       setBusy(k,"Making the answer key from the papers…");
       try{ await keyFromPapers(aid,blobs.slice(0,CAP.imgMax)); }
       catch(e){ toast("Couldn't make an answer key from the papers, so grading will work out the answers itself."); }
     }
-    const labels=[];
-    for(let i=0;i<blobs.length;i+=CAP.imgMax){
-      const chunk=blobs.slice(i,i+CAP.imgMax);
-      setBusy(k,`Finding names: pages ${i+1}–${i+chunk.length} of ${blobs.length}`);
-      const r=await CAP.sample.json([`These ${chunk.length} images are consecutive scanned pages from a stack of student papers for the assignment "${a.title}".`,
-        roster.length?`Class roster:\n${roster.map(s=>s.name).join("\n")}`:"There is no class roster yet.",
-        `For each image in order, read the handwritten student name if one is written on that page. Return the matching roster name exactly as listed, or "" if the page has no name or the name matches nobody on the roster. Set "first" to true if the page looks like the first page of a student's assignment (a name line, or the assignment's first question). Papers may be scanned front and back: a page with no name that continues a student's work, holds scratch work, or is the back of a sheet is never a first page, so set "first" to false for it.`,
-        `Also give "written": the name exactly as written on the page, or "" if none. Pages with no name still count: mark where each new paper starts with "first" so they can be graded separately.`,
-        `Reply with only a JSON array with one entry per image: [{"page": 1, "student": "Roster Name", "written": "name as written", "first": true}]`].join("\n\n"),{images:chunk,modelTier:"default"});
-      const arr=Array.isArray(r)?r:(r&&Array.isArray(r.pages)?r.pages:[]);
-      chunk.forEach((_,j)=>{const it=arr.find(x=>Number(x&&x.page)===j+1)||arr[j]||{}; labels.push({student:String(it.student||""),written:String(it.written||"").slice(0,60),first:!!it.first})});
+    const pages=[];
+    for(let i=0;i<blobs.length;i++){ setBusy(k,`Saving page ${i+1} of ${blobs.length}…`); pages.push(...await uploadPages([blobs[i]])); }
+    const bid="b"+uid();
+    put("batches",bid,{id:bid,aid,pages,total,labels:null,groups:null,next:0,status:"naming",created:Date.now(),beat:Date.now()});
+    await runBatch(bid,blobs);
+  }catch(e){ toast(errMsg(e,"The upload didn't finish. Try again.")); setBusy(k,null); }
+}
+const RUNNER=uid(); const running=new Set();
+async function runBatch(bid,blobs){
+  if(running.has(bid)) return; running.add(bid);
+  let b=S.batches[bid]; if(!b){ running.delete(bid); return; }
+  const aid=b.aid, k="stack"+aid; const a=S.assignments[aid]; if(!a){ running.delete(bid); return; }
+  const save=patch=>{ b={...S.batches[bid],...patch,runner:RUNNER,beat:Date.now()}; put("batches",bid,b); };
+  const blobAt=async i=>{ if(blobs&&blobs[i]) return blobs[i]; const r=await fetch(pageSrc(b.pages[i])); if(!r.ok) throw new Error("A saved page couldn't be loaded."); return r.blob(); };
+  await holdAwake(true);
+  try{
+    save({status:b.status});
+    const roster=students(gradesOf(a));
+    if(!b.labels){
+      const labels=[];
+      for(let i=0;i<b.pages.length;i+=CAP.imgMax){
+        const n=Math.min(CAP.imgMax,b.pages.length-i); const chunk=[]; for(let j=0;j<n;j++) chunk.push(await blobAt(i+j));
+        setBusy(k,`Finding names: pages ${i+1}–${i+n} of ${b.pages.length}`);
+        let arr=[];
+        try{
+          const r=await sampleJson([`These ${n} images are consecutive scanned pages from a stack of student papers for the assignment "${a.title}".`,
+            roster.length?`Class roster:\n${roster.map(s=>s.name).join("\n")}`:"There is no class roster yet.",
+            `For each image in order, read the handwritten student name if one is written on that page. Return the matching roster name exactly as listed, or "" if the page has no name or the name matches nobody on the roster. Also give "written": the name exactly as written on the page, or "" if none. Set "first" to true if the page looks like the first page of a student's paper (a name line, or the assignment's first question). Papers may be scanned front and back: a page with no name that continues a student's work, holds scratch work, or is the back of a sheet is never a first page.`,
+            `Reply with only a JSON array with one entry per image: [{"page": 1, "student": "Roster Name", "written": "name as written", "first": true}]`].join("\n\n"),{images:chunk,modelTier:"default"},w=>setBusy(k,`Claude is busy. Continuing in ${w} seconds…`));
+          arr=Array.isArray(r)?r:(r&&Array.isArray(r.pages)?r.pages:[]);
+        }catch(e){ arr=[]; }
+        for(let j=0;j<n;j++){ const it=arr.find(x=>Number(x&&x.page)===j+1)||arr[j]||{}; labels.push({student:String(it.student||""),written:String(it.written||"").slice(0,60),first:arr.length?!!it.first:j===0}); }
+      }
+      save({labels,status:"grouping"});
     }
-    /* A matched name starts (or continues) that student's paper. A new paper with no name, or a name not on the roster, becomes its own unnamed paper. */
-    const groups=new Map(); let cur=null, overflow=0, unnamedN=Object.values(S.submissions).filter(x=>x.assignmentId===aid&&x.unnamed).length;
-    labels.forEach((l,i)=>{
-      const st=matchName(l.student,roster)||matchName(l.written,roster);
-      if(st) cur=st.id;
-      else if(l.first||l.written.trim()||!cur){ unnamedN++; cur="u"+uid(); groups.set(cur,{unnamed:true,label:`Paper ${unnamedN}`,written:l.written.trim(),pages:[]}); }
-      if(!groups.has(cur)) groups.set(cur,{pages:[]});
-      const g=groups.get(cur); if(g.pages.length<MAX_PAGES) g.pages.push(blobs[i]); else overflow++;
-    });
-    let n=0; const unnamed=[...groups.values()].filter(g=>g.unnamed).length;
-    for(const [gid,g] of groups){ n++;
-      setBusy(k,`Grading paper ${n} of ${groups.size}: ${g.unnamed?g.label:S.students[gid].name}`);
-      if(g.unnamed) await submitUnnamed(aid,g); else await submitPages(aid,gid,g.pages,""); }
-    const notes=[];
-    if(unnamed) notes.push(`${unnamed} paper${unnamed>1?"s had":" had"} no name we could match, so ${unnamed>1?"they were":"it was"} graded as ${unnamed>1?"unnamed papers":"an unnamed paper"}. Pick whose paper it is to save the grade.`);
-    if(overflow) notes.push(`${overflow} page${overflow>1?"s were":" was"} skipped because a student had more than ${MAX_PAGES} pages.`);
-    if(total>cap) notes.push(`Only the first ${cap} pages of the scan were read.`);
+    if(!b.groups){
+      const groups=[]; let cur=null; let unnamedN=Object.values(S.submissions).filter(x=>x.assignmentId===aid&&x.unnamed).length; let overflow=0;
+      b.labels.forEach((l,i)=>{
+        const st=matchName(l.student,roster)||matchName(l.written,roster);
+        if(st){ cur=groups.find(g=>g.sid===st.id); if(!cur){ cur={sid:st.id,idx:[]}; groups.push(cur); } }
+        else if(l.first||l.written.trim()||!cur){ unnamedN++; cur={sid:null,label:`Paper ${unnamedN}`,written:l.written.trim(),idx:[]}; groups.push(cur); }
+        if(cur.idx.length<MAX_PAGES) cur.idx.push(i); else overflow++;
+      });
+      save({groups,overflow,status:"grading"});
+    }
+    for(let gi=b.next||0; gi<b.groups.length; gi++){
+      const g=b.groups[gi];
+      setBusy(k,`Grading paper ${gi+1} of ${b.groups.length}${g.sid&&S.students[g.sid]?": "+S.students[g.sid].name:g.label?": "+g.label:""}`);
+      const pblobs=[]; for(const i of g.idx) pblobs.push(await blobAt(i));
+      const refs=g.idx.map(i=>b.pages[i]);
+      const key=g.sid?aid+"__"+g.sid:aid+"__u"+bid+"x"+gi;
+      if(g.sid){ const old=S.submissions[key]; if(old&&old.pages) oldAssets({pages:old.pages.filter(p=>!refs.some(r=>r.asset&&r.asset===p.asset))}); }
+      put("submissions",key,{id:key,assignmentId:aid,studentId:g.sid||null,unnamed:!g.sid,label:g.label||"",written:g.written||"",pages:refs,text:"",status:"uploaded",scores:{},ai:null,error:"",submittedAt:Date.now()});
+      if(CAP.sample&&CAP.imgOK) await gradeIt(key,pblobs,"");
+      save({next:gi+1});
+    }
+    const unnamed=b.groups.filter(g=>!g.sid).length; const notes=[];
+    if(unnamed) notes.push(`${unnamed} paper${unnamed>1?"s had":" had"} no name that matched your class list, so ${unnamed>1?"they were":"it was"} graded as ${unnamed>1?"unnamed papers":"an unnamed paper"}. Pick whose paper it is to save the grade.`);
+    if(b.overflow) notes.push(`${b.overflow} page${b.overflow>1?"s were":" was"} skipped because a paper had more than ${MAX_PAGES} pages.`);
+    if(b.total>b.pages.length) notes.push(`Only the first ${b.pages.length} pages of the scan were read.`);
     put("assignments",aid,{...S.assignments[aid],stackNote:notes.join(" ")});
-    toast(groups.size?`Graded ${groups.size} paper${groups.size>1?"s":""}. Review the suggestions below.`:"No pages could be read. Check the scan.");
-  }catch(e){ toast(errMsg(e,"The stack upload didn't finish. Try again.")); }
-  finally{ setBusy(k,null); }
+    save({status:"done"});
+    toast(`Finished grading ${b.groups.length} paper${b.groups.length>1?"s":""}. Review and accept them.`);
+  }catch(e){ toast(errMsg(e,"Grading paused. Tap Continue grading to pick up where it stopped.")); }
+  finally{ running.delete(bid); setBusy(k,null); holdAwake(false); }
+}
+const openBatches=()=>Object.values(S.batches||{}).filter(b=>b.status!=="done"&&S.assignments[b.aid]);
+function resumeCard(){
+  const list=openBatches().filter(b=>!running.has(b.id)); if(!list.length) return null;
+  return h("div",{class:"card",style:"border:2px solid var(--s2)"},h("h3",null,"Grading was interrupted"),
+    h("div",{class:"small muted"},"The pages are saved. Pick up where it stopped; papers already graded are kept."),
+    list.map(b=>{ const a=S.assignments[b.aid]; const left=b.groups?b.groups.length-(b.next||0):null;
+      return h("div",{class:"row spread"},h("span",null,h("b",null,a.title),h("span",{class:"small muted"},left!=null?` · ${left} paper${left===1?"":"s"} left`:` · ${b.pages.length} pages`)),
+        h("span",{class:"row",style:"gap:6px"},h("button",{class:"btn primary",onclick:()=>{if(canClaude(true)){S.g.aid=b.aid;runBatch(b.id)}}},"Continue grading"),
+          confirmBtn("delB"+b.id,"Discard",()=>{ const used=new Set(Object.values(S.submissions).flatMap(x=>(x.pages||[]).map(p=>p.asset))); oldAssets({pages:b.pages.filter(p=>!used.has(p.asset))}); remove("batches",b.id); }))); }));
+}
+let autoResumed=false;
+function maybeAutoResume(){
+  if(autoResumed||!CAP.ready||!CAP.sample||!CAP.imgOK||!CAP.db) return;
+  const stale=openBatches().filter(b=>!running.has(b.id)&&(b.runner===RUNNER||Date.now()-(b.beat||0)>120000));
+  if(!stale.length) return; autoResumed=true;
+  toast("Picking up grading where it stopped…",3000);
+  (async()=>{ for(const b of stale) await runBatch(b.id); })();
 }
 
 /* ---------------- papers without a name ---------------- */
@@ -1710,7 +1785,7 @@ async function makeAssignment(){
   const rules=`Students are 9–11 years old: use clear, kid-friendly wording and familiar real-world contexts. Each question assesses exactly one of the listed standards; spread the questions across all of them. Everything must work on paper with no pictures: describe any shapes, graphs or models in words, and ask students to draw their own when useful. ${draft.mkPassage?`Write a short original passage (grade-appropriate for this version, on the topic) in "passage", and base at least half of the questions on it (for math, a story or real-world scenario with numbers to use).`:`If a reading standard is listed, write a short original passage in "passage" and base those questions on it; otherwise leave "passage" empty.`} ${draft.mkWord?"Make at least half of the questions word problems: short real-world situations kids know, with names, places and quantities.":""} ${draft.subj==="math"?"Write every fraction as numerator/denominator with no spaces around the slash (e.g. 3/4; mixed numbers like 2 1/3); they are printed in stacked form. Never use the slash for anything else: use ÷ for division and write dates in words.":""} Never mention the version, level, or difficulty on the student page. Do not mention AI anywhere.`;
   const shape=`Reply with only this JSON object:\n{"title": "short worksheet title (the same topic title for every version)", "directions": "one or two sentences of student directions", "passage": "", "questions": [{"text": "the question", "choices": ["four options for multiple choice, otherwise an empty list"], "answer": "the correct answer (for multiple choice, the letter and option, e.g. B) 3/4)", "notes": "what a full-credit answer needs, or acceptable variations", "std": "the one standard code this question assesses", "lines": 3}]}\nUse "lines" for how many answer lines a student needs (0 for multiple choice, up to 8).`;
   try{
-    const res=await Promise.all(TIERS.map(l=>CAP.sample.json([...common,`This is the ${TIER_GUIDE[l]}`,rules,shape].filter(Boolean).join("\n\n"),{modelTier:"default",cache:false}).then(r=>parseWs(r,codes)).catch(e=>({err:e}))));
+    const res=await Promise.all(TIERS.map(l=>sampleJson([...common,`This is the ${TIER_GUIDE[l]}`,rules,shape].filter(Boolean).join("\n\n"),{modelTier:"default",cache:false}).then(r=>parseWs(r,codes)).catch(e=>({err:e}))));
     const failed=res.find(x=>!x||x.err);
     if(failed) throw (failed&&failed.err)||new Error("One of the versions came back empty. Try again.");
     draft.versions={}; TIERS.forEach((l,i)=>draft.versions[l]=res[i]);
@@ -1859,7 +1934,7 @@ async function writeCustom(){
         :`Rules: Write student directions, the task itself, and a student-friendly version of the rubric. Keep the language right for 9–11 year olds. About ${d.words} words.`,
       `Do not mention AI anywhere. Reply with only this JSON object:\n{"title": "title of the piece", "criteria": ["each rubric criterion, short"], "sections": [{"heading": "section heading", "text": "section text; blank lines between paragraphs"}], "selfcheck": [{"criterion": "rubric criterion", "how": "one sentence: where and how the draft meets it"}]}`
     ].filter(Boolean).join("\n\n");
-    const r=await CAP.sample.json(prompt,{images:d.files.length?d.files:undefined,modelTier:"complex",cache:false});
+    const r=await sampleJson(prompt,{images:d.files.length?d.files:undefined,modelTier:"complex",cache:false});
     const secs=(Array.isArray(r&&r.sections)?r.sections:[]).filter(x=>x&&x.text);
     if(!secs.length) throw new Error("The draft came back empty. Try again.");
     const body=secs.map(x=>(x.heading?`## ${String(x.heading).trim()}\n\n`:"")+String(x.text).trim()).join("\n\n");
@@ -1900,7 +1975,7 @@ async function reviseCustom(id,ask){
   const c=S.custom[id]; ask=ask.trim(); if(!ask){toast("Type what you want changed.");return}
   setBusy("c"+id,"Revising your draft…");
   try{
-    const r=await CAP.sample.json([`Revise this ${c.type.toLowerCase()}${c.course?` for ${c.course}`:""}. Keep the author's voice and keep meeting every rubric criterion.`,
+    const r=await sampleJson([`Revise this ${c.type.toLowerCase()}${c.course?` for ${c.course}`:""}. Keep the author's voice and keep meeting every rubric criterion.`,
       voiceBlock(),
       c.criteria&&c.criteria.length?`Rubric criteria:\n- ${c.criteria.join("\n- ")}`:(c.rubricText?`Rubric:\n${c.rubricText.slice(0,8000)}`:""),
       c.audience==="me"&&c.notes?`The author's real notes (the only facts you may state about real people and results; use [ADD: …] placeholders for anything missing):\n"""\n${c.notes.slice(0,12000)}\n"""`:"",
@@ -2090,7 +2165,7 @@ draw();
   CAP.db=db; CAP.assets=assets; CAP.sample=sample; CAP.downloads=downloads;
   if(sample){ try{const l=await sample.limits(); if(l&&l.images) CAP.imgMax=Math.max(1,l.images.maxCount); else CAP.imgOK=false; }catch(e){} }
   CAP.ready=true;
-  if(db){ ["students","assignments","submissions","settings","rosters","custom"].forEach(subscribe); } else loadLocal();
+  if(db){ ["students","assignments","submissions","settings","rosters","custom","batches"].forEach(subscribe); } else loadLocal();
   setStatus(); render();
 })();
 </script>
