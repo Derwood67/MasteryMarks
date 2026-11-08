@@ -482,6 +482,7 @@ function draw(){
   document.querySelectorAll(".overlay").forEach(o=>o.remove());
   if(S.viewSub) drawViewer();
   if(S.keyView) drawKeyView();
+  if(S.graphFor) drawStudentGraph(); else document.querySelectorAll(".overlay.sgraph").forEach(o=>o.remove());
   if(S.scan) drawScanner();
   drawJobs();
   scrollTo(0,y);
@@ -574,6 +575,97 @@ function gradePill(a,st,sub){
   return h("span",{class:"row",style:"gap:6px;align-items:center",title:"The paper's standard scores averaged and rounded to 1–4"},
     h("span",{class:"small muted"},"Calculated grade"),
     h("span",{class:"badge b"+g.lvl,"aria-label":`Calculated grade ${g.lvl}`},g.lvl));
+}
+/* ---------------- one student's graphs ---------------- */
+function studentData(sid){
+  const st=S.students[sid];
+  const pts=Object.values(S.submissions).filter(x=>x.studentId===sid&&!x.unnamed&&(x.ai||x.status==="accepted")&&S.assignments[x.assignmentId])
+    .sort((x,y)=>(x.submittedAt||0)-(y.submittedAt||0))
+    .map(x=>{const a=S.assignments[x.assignmentId]; const g=calcGrade(a,st,x); return {a,sub:x,lvl:g.lvl,date:x.submittedAt};}).filter(p=>p.lvl);
+  const stds=[]; for(const k of Object.keys(SUBJ)) for(const strand of STD[st.grade][k]) for(const [c,t] of strand.i){ const v=(st.scores||{})[c]; if(v) stds.push({c,t,v,k}); }
+  return {st,pts,stds};
+}
+function lineChartSvg(pts){
+  const W=380,Hh=210,L=30,R=16,T=22,B=34, iw=W-L-R, ih=Hh-T-B;
+  const x=i=>pts.length===1?L+iw/2:L+i*(iw/(pts.length-1)), y=v=>T+ih-(v-1)/3*ih;
+  const grid=[1,2,3,4].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)" stroke-width="1"/><text x="${L-10}" y="${y(v)+4}" text-anchor="end" style="fill:var(--muted)" font-size="14">${v}</text>`).join("");
+  const path=pts.map((p,i)=>`${i?"L":"M"}${x(i)},${y(p.lvl)}`).join(" ");
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const step=Math.max(1,Math.ceil(pts.length/4));
+  const dots=pts.map((p,i)=>`<g><title>${esc(p.a.title)} · ${fmtDate(p.date)} · grade ${p.lvl}</title><circle cx="${x(i)}" cy="${y(p.lvl)}" r="12" fill="transparent"/><circle cx="${x(i)}" cy="${y(p.lvl)}" r="6.5" style="fill:var(--s${p.lvl});stroke:var(--surface)" stroke-width="2"/></g>`
+    +(i%step===0||i===pts.length-1?`<text x="${x(i)}" y="${Hh-14}" text-anchor="${pts.length>1&&i===pts.length-1?"end":pts.length>1&&i===0?"start":"middle"}" style="fill:var(--muted)" font-size="13">${esc(new Date(p.date).toLocaleDateString(undefined,{month:"short",day:"numeric"}))}</text>`:"")).join("");
+  const last=pts[pts.length-1];
+  return `<svg viewBox="0 0 ${W} ${Hh}" width="100%" role="img" aria-label="Calculated grade on each assignment over time" style="display:block;max-width:100%">${grid}<path d="${path}" fill="none" style="stroke:var(--accent)" stroke-width="2" stroke-linejoin="round"/>${dots}<text x="${x(pts.length-1)}" y="${y(last.lvl)-12}" text-anchor="middle" style="fill:var(--ink)" font-size="15" font-weight="700">${last.lvl}</text></svg>`;
+}
+function drawStudentGraph(){
+  document.querySelectorAll(".overlay.sgraph").forEach(o=>o.remove());
+  const sid=S.graphFor; const st=S.students[sid]; if(!st){S.graphFor=null;return}
+  const d=studentData(sid); const close=()=>{S.graphFor=null;draw()};
+  const bySubj={}; for(const x of d.stds) (bySubj[x.k]=bySubj[x.k]||[]).push(x);
+  const reteach=d.stds.filter(x=>x.v<=2);
+  const chart=h("div",{class:"chart"}); if(d.pts.length) chart.innerHTML=lineChartSvg(d.pts);
+  const ov=h("div",{class:"overlay sgraph",onclick:e=>{if(e.target===ov) close()}},
+    h("div",{class:"sheet",role:"dialog","aria-label":`${st.name}'s graphs`},
+      h("div",{class:"row spread"},h("div",null,h("h2",null,st.name),h("div",{class:"small muted"},`Grade ${st.grade}${(st.level&&st.level!=="avg")?` · ${TIER[lvlOf(st)].label}`:""} · ${d.pts.length} graded assignment${d.pts.length===1?"":"s"}`)),h("button",{class:"btn ghost",onclick:close},"Close")),
+      h("div",{class:"chart"},h("h4",null,"Calculated grade on each assignment"),
+        d.pts.length?[chart,
+          h("details",null,h("summary",null,"Show as a table"),h("div",{class:"tbl"},h("table",null,h("thead",null,h("tr",null,h("th",null,"Date"),h("th",null,"Assignment"),h("th",null,"Grade"))),
+            h("tbody",null,d.pts.map(p=>h("tr",null,h("td",null,fmtDate(p.date)),h("td",null,p.a.title),h("td",null,badge(p.lvl))))))))]
+        :h("div",{class:"small muted"},"No graded assignments yet.")),
+      h("div",{class:"chart"},h("h4",null,"Score on each standard"),
+        d.stds.length?Object.keys(bySubj).map(k=>h("div",{class:"f",style:"gap:6px"},h("span",{class:"small"},h("b",null,SUBJ[k])),
+          h("div",{class:"hb",role:"list"},bySubj[k].map(x=>[
+            h("span",{class:"lab",role:"listitem"},h("span",{class:"code"},x.c)),
+            h("div",{class:"track",title:`${x.c}: ${x.v} (${LEVELS[x.v]}) · ${x.t}`},h("div",{class:"fill",style:`width:${x.v/4*100}%;background:var(--s${x.v})`})),
+            h("span",{class:"val"},x.v)]))))
+        :h("div",{class:"small muted"},"No standards scored yet.")),
+      reteach.length?h("div",{class:"stdbox",style:"gap:6px;border-left:4px solid var(--s1)"},h("b",null,"Needs more practice (scored 1 or 2)"),
+        reteach.map(x=>h("div",{class:"small"},h("span",{class:"code"},x.c)," ",x.t))):null,
+      h("div",{class:"row"},printBtn(()=>studentGraphPdf(sid),"Print graphs","primary"),h("button",{class:"btn ghost",onclick:()=>studentGraphPdf(sid)},"Download PDF"))));
+  document.body.append(ov);
+}
+async function studentGraphPdf(sid){
+  const d=studentData(sid); const st=d.st;
+  try{
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"pt",format:"letter"});
+    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=48, TW=W-2*M; let y=0;
+    const need=n=>{ if(y+n>H-50){ doc.addPage(); y=56; } };
+    const COL={1:[192,72,42],2:[176,138,6],3:[46,138,85],4:[45,99,180]}, INK=[23,32,28], MUT=[90,104,98], LINE=[207,216,211];
+    doc.setFillColor(30,106,80); doc.rect(0,0,W,6,"F");
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUT); doc.text([S.settings.school,teacherName(),S.settings.term].filter(Boolean).join("  ·  "),M,30);
+    doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(...INK); doc.text(st.name,M,58);
+    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUT); doc.text(`Grade ${st.grade}  ·  Progress graphs  ·  ${new Date().toLocaleDateString()}`,M,76); y=104;
+    doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...INK); doc.text("Calculated grade on each assignment",M,y); y+=14;
+    if(d.pts.length){
+      const CH=150, L=M+24, iw=TW-34, top=y+8, yy=v=>top+CH-(v-1)/3*CH, xx=i=>d.pts.length===1?L+iw/2:L+i*iw/(d.pts.length-1);
+      doc.setFont("helvetica","normal"); doc.setFontSize(9);
+      for(const v of [1,2,3,4]){ doc.setDrawColor(...LINE); doc.setLineWidth(0.6); doc.line(L,yy(v),L+iw,yy(v)); doc.setTextColor(...MUT); doc.text(String(v),M+8,yy(v)+3,{align:"right"}); }
+      doc.setDrawColor(30,106,80); doc.setLineWidth(2); for(let i=1;i<d.pts.length;i++) doc.line(xx(i-1),yy(d.pts[i-1].lvl),xx(i),yy(d.pts[i].lvl));
+      const step=Math.max(1,Math.ceil(d.pts.length/8));
+      d.pts.forEach((p,i)=>{ doc.setFillColor(...COL[p.lvl]); doc.setDrawColor(255,255,255); doc.setLineWidth(1.5); doc.circle(xx(i),yy(p.lvl),5,"FD");
+        if(i%step===0||i===d.pts.length-1){ doc.setTextColor(...MUT); doc.setFontSize(8); doc.text(new Date(p.date).toLocaleDateString(undefined,{month:"short",day:"numeric"}),xx(i),top+CH+14,{align:"center"}); } });
+      y=top+CH+34;
+      doc.setFontSize(9); for(const p of d.pts){ need(14); doc.setTextColor(...INK); doc.text(`${fmtDate(p.date)}   ${p.a.title}`,M,y,{maxWidth:TW-40}); doc.setFont("helvetica","bold"); doc.text(String(p.lvl),M+TW,y,{align:"right"}); doc.setFont("helvetica","normal"); y+=13; }
+      y+=12;
+    } else { doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUT); doc.text("No graded assignments yet.",M,y+4); y+=24; }
+    need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...INK); doc.text("Score on each standard",M,y); y+=14;
+    const LX=M+86, BW=TW-86-24;
+    let lastK="";
+    for(const x of d.stds){
+      if(x.k!==lastK){ need(30); doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(30,106,80); doc.text(SUBJ[x.k],M,y+10); y+=18; lastK=x.k; }
+      need(18); doc.setFont("courier","normal"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(x.c,M,y+9);
+      doc.setFillColor(227,233,229); doc.roundedRect(LX,y,BW,11,3,3,"F"); doc.setFillColor(...COL[x.v]); doc.rect(LX,y,BW*x.v/4,11,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.text(String(x.v),M+TW,y+9,{align:"right"}); y+=17;
+    }
+    if(!d.stds.length){ doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUT); doc.text("No standards scored yet.",M,y+4); y+=20; }
+    const re=d.stds.filter(x=>x.v<=2);
+    if(re.length){ y+=8; need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...INK); doc.text("Needs more practice (scored 1 or 2)",M,y); y+=14;
+      doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(...MUT);
+      for(const x of re) for(const t of doc.splitTextToSize(`${x.c}  ${x.t}`,TW)){ need(13); doc.text(t,M,y); y+=12; } }
+    await outPdf(doc,`${st.name.replace(/[^\w ,.-]+/g,"")} - progress graphs.pdf`);
+    toast("PDF saved.");
+  }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the PDF. Try again."); }
 }
 /* ---------------- class results: graphs and what to reteach ---------------- */
 const GOAL=0.7; /* a standard needs reteaching when fewer than 70% of students score 3 or 4 */
@@ -1674,6 +1766,7 @@ function viewWork(){
         h("div",{class:"row"},
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
+          h("button",{class:"btn ghost",onclick:()=>{S.graphFor=st.id;draw()}},"Graph"),
           h("button",{class:"btn ghost",onclick:()=>{S.viewSub=key;draw()}},"View pages"),
           h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change grade"),
           gradePill(a,st,sub)));
@@ -1740,7 +1833,7 @@ function drawViewer(){
         confirmBtn("delS"+s.id,"Delete this submission",()=>{deleteSub(s);S.viewSub=null}))));
   document.body.append(ov);
 }
-document.addEventListener("keydown",e=>{if(e.key!=="Escape") return; if(S.keyView){S.keyView=null;draw()} else if(S.viewSub){S.viewSub=null;draw()}});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape") return; if(S.graphFor){S.graphFor=null;draw()} else if(S.keyView){S.keyView=null;draw()} else if(S.viewSub){S.viewSub=null;draw()}});
 
 /* ---------------- Class ---------------- */
 let addG=4, addTxt="";
@@ -1757,6 +1850,7 @@ function viewClass(){
     students().length?h("div",{class:"list"},students().map(st=>h("div",{class:"li"},h("span",{class:"name"},st.name),
       h("select",{id:"lvl-"+st.id,"aria-label":`Level for ${st.name}`,style:"width:auto",onchange:e=>put("students",st.id,{...S.students[st.id],level:e.target.value})},TIERS.map(l=>h("option",{value:l,selected:lvlOf(st)===l},TIER[l].label))),
       h("div",{class:"seg"},[4,5].map(g=>h("button",{"aria-pressed":String(st.grade==g),onclick:()=>put("students",st.id,{...st,grade:g})},"Gr "+g))),
+      h("button",{class:"btn ghost",onclick:()=>{S.graphFor=st.id;draw()}},"Graph"),
       confirmBtn("delSt"+st.id,"Remove",()=>{Object.values(S.submissions).filter(s=>s.studentId===st.id).forEach(deleteSub);remove("students",st.id)})))):h("div",{class:"card empty"},"No students yet."),
     rosterCard(),
     h("div",{class:"card"},h("h3",null,"Report details"),
@@ -2253,7 +2347,7 @@ function viewReports(){
     chosen.length?h("div",{class:"card"},h("h3",null,"Preview"),h("div",{class:"tbl"},h("table",null,
       h("thead",null,h("tr",null,h("th",null,"Student"),h("th",null,"Gr"),Object.values(SUBJ).map(l=>h("th",null,l)),h("th",null,"Scored"))),
       h("tbody",null,chosen.map(st=>{const tot=Object.keys(SUBJ).reduce((n,k)=>n+flat(st.grade,k).length,0), sc=Object.keys(st.scores||{}).filter(c=>STDTEXT[c]).length;
-        return h("tr",null,h("td",null,st.name),h("td",null,st.grade),Object.keys(SUBJ).map(k=>{const a=subjAvg(st,st.grade,k);return h("td",null,a==null?"–":a.toFixed(1))}),h("td",null,`${sc}/${tot}`))}))))):null
+        return h("tr",null,h("td",null,h("button",{class:"btn ghost",style:"padding:0;min-height:0","aria-label":`Graph for ${st.name}`,onclick:()=>{S.graphFor=st.id;draw()}},st.name)),h("td",null,st.grade),Object.keys(SUBJ).map(k=>{const a=subjAvg(st,st.grade,k);return h("td",null,a==null?"–":a.toFixed(1))}),h("td",null,`${sc}/${tot}`))}))))):null
   ];
 }
 async function makePdf(list){
