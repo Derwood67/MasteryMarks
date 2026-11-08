@@ -1082,17 +1082,18 @@ async function keyPdf(a){
     doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(23,32,28); const tl=doc.splitTextToSize(`Answer Sheet: ${a.title}`,TW); doc.text(tl,M,56);
     cur.y=56+tl.length*20;
     doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(90,104,98);
-    const sl=doc.splitTextToSize(`${gradeLabel(a)} ${SUBJ[a.subj]}${a.codes.length?"  ·  Standards: "+a.codes.join(", "):""}`,TW); doc.text(sl,M,cur.y); cur.y+=sl.length*12+12;
+    const sl=doc.splitTextToSize(`${gradeLabel(a)} ${SUBJ[a.subj]}${a.codes.length?"  ·  Standards: "+a.codes.join(", "):""}`,TW); doc.text(sl,M,cur.y); cur.y+=sl.length*12+24;
     doc.setDrawColor(23,32,28);
     const sets=a.versions?TIERS.map(l=>({label:`${TIER[l].label} (Form ${TIER[l].form})`,key:a.versions[l].key})):[{label:"",key:a.key}];
     sets.forEach((set,si)=>{
     if(set.label){ if(si){ doc.addPage(); cur.y=50; } doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.setTextColor(30,106,80); doc.text(set.label,M,cur.y+6); cur.y+=14; }
     for(const x of set.key.answers){
       need(60); cur.y+=8; doc.setDrawColor(207,216,211); doc.setLineWidth(0.6); doc.line(M,cur.y,M+TW,cur.y); cur.y+=12;
-      doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(23,32,28); doc.text(x.n+".",M,cur.y+11);
       if(x.std){ doc.setFont("courier","normal"); doc.setFontSize(8); doc.setTextColor(90,104,98); doc.text(x.std,M+TW,cur.y+10,{align:"right"}); }
-      doc.setDrawColor(23,32,28);
-      doc.setFont("helvetica","normal"); doc.setTextColor(60,72,66); drawRich(doc,x.question,M+24,cur,TW-110,10,math,need);
+      doc.setDrawColor(23,32,28); const pg0=doc.getCurrentPageInfo().pageNumber; cur.firstBase=null;
+      doc.setFont("helvetica","normal"); doc.setTextColor(60,72,66); drawRich(doc,x.question||" ",M+24,cur,TW-110,10,math,need);
+      { const pg1=doc.getCurrentPageInfo().pageNumber; if(pg1!==pg0) doc.setPage(pg0); doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(23,32,28); doc.text(x.n+".",M,cur.firstBase); if(pg1!==pg0) doc.setPage(pg1); }
+      cur.y+=4;
       doc.setFont("helvetica","bold"); doc.setTextColor(23,32,28); drawRich(doc,"Answer: "+x.answer,M+24,cur,TW-24,11,math,need);
       if(x.notes){ doc.setFont("helvetica","italic"); doc.setTextColor(90,104,98); drawRich(doc,x.notes,M+24,cur,TW-24,9.5,math,need); }
       cur.y+=6;
@@ -1144,7 +1145,7 @@ function drawRich(doc,text,x,cur,maxW,fs,math,need){
   for(const line of lines){
     const hasF=line.some(g=>g.n!=null); const lh=hasF?fs*3.0:fs*1.35;
     if(need) need(lh);
-    const base=cur.y+(hasF?fs*1.95:fs*0.98); let cx=x;
+    const base=cur.y+(hasF?fs*1.95:fs*0.98); let cx=x; if(cur.firstBase==null) cur.firstBase=base;
     for(const g of line){
       if(g.sp){ cx+=g.w; continue; }
       if(g.s!=null){ useText(); doc.text(g.s,cx,base); cx+=g.w; continue; }
@@ -1418,10 +1419,10 @@ async function studentPdf(subs,fname,opts){
       doc.text([S.settings.school,T,S.settings.term].filter(Boolean).join("  ·  "),M,30);
       doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(23,32,28); doc.text(st.name,M,58);
       doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(60,72,66);
-      const sub1=doc.splitTextToSize(`${a.title}  ·  ${gradeLabel(a)} ${SUBJ[a.subj]}  ·  ${fmtDate(sub.submittedAt)}`,TW); doc.text(sub1,M,76); y=76+sub1.length*14;
-      if(sub.ai&&sub.ai.correct){ doc.setFont("helvetica","bold"); doc.text(`Correct: ${sub.ai.correct}`,M,y+4); y+=18; }
+      const sub1=doc.splitTextToSize(`${a.title}  ·  ${gradeLabel(a)} ${SUBJ[a.subj]}  ·  ${fmtDate(sub.submittedAt)}`,TW); doc.text(sub1,M,76); y=76+sub1.length*14+12;
+      if(sub.ai&&sub.ai.correct){ doc.setFont("helvetica","bold"); doc.text(`Correct: ${sub.ai.correct}`,M,y+4); y+=24; }
       if(codesFor(a,st).length){
-        doc.autoTable({startY:y+4,margin:{left:M,right:M},head:[["Standard","What it means","Score","Level"]],
+        doc.autoTable({startY:y+6,margin:{left:M,right:M},head:[["Standard","What it means","Score","Level"]],
           body:codesFor(a,st).map(c=>{const v=(sub.scores||{})[c];return [c,STDTEXT[c],v?String(v):"–",v?LEVELS[v]:"Not scored"]}),
           theme:"grid",styles:{fontSize:9,cellPadding:5,lineColor:[207,216,211],textColor:[23,32,28],valign:"middle"},
           headStyles:{fillColor:[227,233,229],textColor:[23,32,28]},columnStyles:{0:{cellWidth:74,font:"courier"},2:{cellWidth:42,halign:"center",fontStyle:"bold"},3:{cellWidth:74}},
@@ -1442,7 +1443,7 @@ async function studentPdf(subs,fname,opts){
       }
       const ans=(sub.ai&&sub.ai.transcript||"").trim()||(sub.text||"").trim();
       if(ans){
-        need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(23,32,28); doc.text("Your answers",M,y); y+=16;
+        need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(23,32,28); doc.text("Your answers",M,y); y+=20;
         doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(40,50,45);
         const cur={get y(){return y},set y(v){y=v}};
         drawRich(doc,ans.replace(/\[illegible\]/g,"[could not read]"),M,cur,TW,10,a.subj==="math",need);
@@ -1450,10 +1451,10 @@ async function studentPdf(subs,fname,opts){
       }
       const vk=verOf(a,lvlOf(st)).key;
       if(vk&&vk.answers&&vk.answers.length){
-        need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(23,32,28); doc.text("Correct answers",M,y); y+=8;
+        y+=16; need(40); doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(23,32,28); doc.text("Correct answers",M,y); y+=14;
         const cur={get y(){return y},set y(v){y=v}};
         doc.setFont("helvetica","normal"); doc.setTextColor(40,50,45); doc.setDrawColor(23,32,28);
-        vk.answers.forEach((x,i)=>{ if(i){ need(14); cur.y+=7; doc.setDrawColor(220,226,223); doc.setLineWidth(0.5); doc.line(M,cur.y,M+TW,cur.y); doc.setDrawColor(23,32,28); cur.y+=5; } drawRich(doc,`${x.n}.  ${x.answer}`,M,cur,TW,10,a.subj==="math",need); });
+        vk.answers.forEach((x,i)=>{ if(i){ need(20); cur.y+=9; doc.setDrawColor(220,226,223); doc.setLineWidth(0.5); doc.line(M,cur.y,M+TW,cur.y); doc.setDrawColor(23,32,28); cur.y+=8; } drawRich(doc,`${x.n}.  ${x.answer}`,M,cur,TW,10,a.subj==="math",need); });
       }
       if(opts.pages&&sub.pages&&sub.pages.length){
         for(let pi=0;pi<sub.pages.length;pi++){
@@ -1571,9 +1572,9 @@ function drawWorksheet(doc,a,ws,form,name){
   doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setDrawColor(120,130,125); doc.setLineWidth(0.6);
   doc.text("Name",M,cur.y+6); doc.line(M+34,cur.y+8,M+TW*0.62,cur.y+8);
   if(name){ doc.setFont("helvetica","bold"); doc.text(name,M+40,cur.y+5); doc.setFont("helvetica","normal"); }
-  doc.text("Date",M+TW*0.66,cur.y+6); doc.line(M+TW*0.66+30,cur.y+8,M+TW,cur.y+8); cur.y+=24;
+  doc.text("Date",M+TW*0.66,cur.y+6); doc.line(M+TW*0.66+30,cur.y+8,M+TW,cur.y+8); cur.y+=34;
   doc.setDrawColor(23,32,28);
-  if(ws.directions){ doc.setFont("helvetica","italic"); doc.setTextColor(40,50,45); drawRich(doc,ws.directions,M,cur,TW,10.5,math,need); cur.y+=8; }
+  if(ws.directions){ doc.setFont("helvetica","italic"); doc.setTextColor(40,50,45); drawRich(doc,ws.directions,M,cur,TW,10.5,math,need); cur.y+=20; }
   if(ws.passage){
     need(60); doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(30,106,80); doc.text("Read the passage.",M,cur.y+10); cur.y+=18;
     doc.setFont("times","normal"); doc.setTextColor(23,32,28);
@@ -1584,8 +1585,9 @@ function drawWorksheet(doc,a,ws,form,name){
   ws.questions.forEach((q,qi)=>{
     if(qi){ need(30); cur.y+=12; doc.setDrawColor(200,208,204); doc.setLineWidth(0.6); doc.setLineDashPattern([3,3],0); doc.line(M,cur.y,M+TW,cur.y); doc.setLineDashPattern([],0); cur.y+=16; }
     need(q.choices.length?90:50+Math.min(q.lines,3)*24);
-    doc.setFont("helvetica","bold"); doc.setFontSize(11.5); doc.setTextColor(23,32,28); doc.text(q.n+".",M,cur.y+11.5);
+    doc.setFontSize(11.5); doc.setTextColor(23,32,28); const pg0=doc.getCurrentPageInfo().pageNumber; cur.firstBase=null;
     doc.setFont("helvetica","normal"); doc.setDrawColor(23,32,28); drawRich(doc,q.text,M+22,cur,TW-22,11.5,math,need); cur.y+=2;
+    { const pg1=doc.getCurrentPageInfo().pageNumber; if(pg1!==pg0) doc.setPage(pg0); doc.setFont("helvetica","bold"); doc.setFontSize(11.5); doc.text(q.n+".",M,cur.firstBase); if(pg1!==pg0) doc.setPage(pg1); doc.setFont("helvetica","normal"); }
     if(q.choices.length){
       q.choices.forEach((c,i)=>{ const y0=cur.y; doc.setDrawColor(23,32,28); doc.setLineWidth(0.7);
         drawRich(doc,`${"ABCDE"[i]}.  ${c}`,M+40,cur,TW-40,11,math,need); const mid=y0+(cur.y-y0)/2; doc.circle(M+29,Math.min(mid,cur.y-6),5); });
