@@ -829,6 +829,7 @@ function gradeResults(a){
     !rows.length?h("div",{class:"small muted"},"Grades show up here as each paper is finished."):null,
     rows.length?h("div",{class:"row"},
       rev.length?h("button",{class:"btn primary",onclick:()=>{rev.forEach(acceptSub);toast(`Saved ${rev.length} grade${rev.length>1?"s":""} to the gradebook.`)}},`Accept all ${rev.length} grade${rev.length>1?"s":""}`):null,
+      done.length?printBtn(()=>studentPdf(done,`${a.title} - marked papers`,{marked:true}),`Print marked papers (${done.length})`,"primary"):null,
       done.length?printBtn(()=>studentPdf(done,`${a.title} - graded papers`,{pages:true}),`Print all (${done.length}) with work`):null,
       done.length?printBtn(()=>studentPdf(done,`${a.title} - grades and feedback`),`Print all without work`):null,
       h("button",{class:"btn ghost",onclick:()=>{S.keyView=a.id;draw()}},"Answer key")):null,
@@ -846,6 +847,7 @@ function gradeResults(a){
         itemsView(sub,math,false),
         h("div",{class:"row"},
           sub.status==="review"?h("button",{class:"btn",onclick:()=>{acceptSub(sub);toast(`Saved ${st.name}'s grade.`)}},"Accept"):null,
+          (sub.ai||sub.status==="accepted")&&sub.pages&&sub.pages.length?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title} marked`,{marked:true}),"Print marked paper"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
           sub.pages&&sub.pages.length?h("button",{class:"btn ghost",onclick:()=>{S.viewSub=key;draw()}},"See marked paper"):null,
@@ -1807,6 +1809,7 @@ function unnamedCard(a,compact){
         !compact&&fbOf(sub)?h("div",{class:"feedback"},fbOf(sub)):null,
         !compact?itemsView(sub,math,false):null,
         h("div",{class:"row"},whoseBtn(sub,a),
+          (sub.ai)&&sub.pages&&sub.pages.length?printBtn(()=>studentPdf([S.submissions[sub.id]],`${sub.label||"Paper"} - ${a.title} marked`,{marked:true}),"Print marked paper"):null,
           (sub.ai)?printBtn(()=>studentPdf([S.submissions[sub.id]],`${sub.label||"Paper"} - ${a.title}`,{pages:true}),"Print with work"):null,
           (sub.ai)?printBtn(()=>studentPdf([S.submissions[sub.id]],`${sub.label||"Paper"} - ${a.title}`),"Print without work"):null,
           (sub.status==="uploaded"||sub.status==="error")&&sub.pages&&sub.pages.length&&!busy?h("button",{class:"btn",onclick:()=>{if(canClaude(true)) regradeUnnamed(sub.id)}},"Grade"):null,
@@ -1880,7 +1883,8 @@ function viewWork(){
         rows.length-turned.length?h("span",{class:"pill rev"},`${rows.length-turned.length} missing`):null,
         classAvg!=null?h("span",{class:"pill ok"},`Class average ${classAvg.toFixed(1)}`):null),
       h("div",{class:"row"},
-        printBtn(()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true}),`Print all (${printable.length}) with work`,"primary"),
+        printBtn(()=>studentPdf(printable,`${a.title} - marked papers (${sortName})`,{keepOrder:true,marked:true}),`Print marked papers (${printable.length})`,"primary"),
+        printBtn(()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true}),`Print all (${printable.length}) with work`),
         printBtn(()=>studentPdf(printable,`${a.title} - grades and feedback (${sortName})`,{keepOrder:true}),`Print all without work`),
         h("button",{class:"btn ghost",onclick:()=>studentPdf(printable,`${a.title} - student work (${sortName})`,{keepOrder:true,pages:true})},"Download PDF")),
       h("div",{class:"small muted"},"Prints in the order shown. With work adds each student's scanned pages after their grades and feedback; without work prints just the grades and feedback.")),
@@ -1899,6 +1903,7 @@ function viewWork(){
         sub.pages&&sub.pages.length?h("div",{class:"thumbs"},sub.pages.map((p,i)=>h("img",{src:pageSrc(p),alt:`${st.name}, page ${i+1}`,loading:"lazy",onclick:()=>{S.viewSub=key;draw()}}))):null,
         (sub.ai||sub.status==="accepted")?h("label",{class:"f"},`Feedback from ${teacherName()}`,h("textarea",{id:"wfb-"+key,style:"min-height:60px",onchange:e=>put("submissions",key,{...S.submissions[key],feedback:e.target.value})},fbOf(sub))):null,
         h("div",{class:"row"},
+          (sub.ai||sub.status==="accepted")&&sub.pages&&sub.pages.length?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title} marked`,{marked:true}),"Print marked paper"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
           h("button",{class:"btn ghost",onclick:()=>{S.graphFor=st.id;draw()}},"Graph"),
@@ -1966,7 +1971,8 @@ function drawViewer(){
       s.text?h("details",null,h("summary",null,"Typed submission"),h("pre",{class:"tx"},s.text)):null,
       (s.pages||[]).length&&s.ai&&(s.ai.items||[]).length?h("div",{class:"row"},
         (s.ai.marks||[]).length?h("label",{class:"row small"},h("input",{type:"checkbox",id:"showMarks",checked:!S.hideMarks,onchange:e=>{S.hideMarks=!e.target.checked;draw()}}),"Show ✓ and ✗ marks (drag a mark to move it)"):null,
-        S.busy[s.id]?h("span",{class:"pill"},h("span",{class:"spin"}),S.busy[s.id]):h("button",{class:"btn",onclick:()=>{if(canClaude(true)) markPaper(s.id)}},(s.ai.marks||[]).length?"Redo marks":"Mark up this paper")):null,
+        S.busy[s.id]?h("span",{class:"pill"},h("span",{class:"spin"}),S.busy[s.id]):h("button",{class:"btn",onclick:()=>{if(canClaude(true)) markPaper(s.id)}},(s.ai.marks||[]).length?"Redo marks":"Mark up this paper"),
+        printBtn(()=>studentPdf([S.submissions[s.id]],`${subName(s)} - ${a.title} marked`,{marked:true}),"Print marked paper","primary")):null,
       (s.pages||[]).map((p,i)=>markedPage(s,i,`Page ${i+1}`)),
       h("div",{class:"row"},h("button",{class:"btn",onclick:()=>{S.viewSub=null;S.tab="assign";S.openA=a.id;draw()}},"Open assignment"),
         confirmBtn("delS"+s.id,"Delete this submission",()=>{deleteSub(s);S.viewSub=null}))));
@@ -2007,12 +2013,54 @@ function viewClass(){
 /* ---------------- feedback + student PDFs ---------------- */
 function teacherName(){ return (S.settings.teacher||"").trim()||"Mr. Echols"; }
 function fbOf(sub){ return sub.feedback!=null?sub.feedback:((sub.ai&&sub.ai.feedback)||""); }
+/* Just the marked-up pages, one student after another, with a small name line and their grade. */
+async function markedPdf(subs,fname){
+  subs=subs.filter(x=>(x.pages||[]).length);
+  if(!subs.length){ toast("These papers have no scanned pages to print."); return; }
+  try{
+    toast("Building PDF…");
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"pt",format:"letter"});
+    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=28; let first=true, unmarked=0;
+    for(let si=0;si<subs.length;si++){ const sub=subs[si];
+      const a=S.assignments[sub.assignmentId]; const st=S.students[sub.studentId]||{name:sub.label||"Unnamed paper",grade:gradesOf(a)[0]};
+      const g=calcGrade(a,st,sub); if(!((sub.ai&&sub.ai.marks)||[]).length) unmarked++;
+      if(subs.length>1) toast(`Building PDF… ${si+1} of ${subs.length}`);
+      for(let pi=0;pi<sub.pages.length;pi++){
+        try{
+          const r=await fetch(pageSrc(sub.pages[pi])); if(!r.ok) continue;
+          const raw=await r.blob(); const pm=((sub.ai&&sub.ai.marks)||[]).filter(m=>m.page===pi);
+          const url=pm.length?(await renderMarked(raw,pm,1500)).toDataURL("image/jpeg",0.85):await shrinkForPrint(raw);
+          if(!first) doc.addPage(); first=false;
+          doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(23,32,28);
+          doc.text(`${st.name}  ·  ${a.title}${sub.pages.length>1?`  ·  page ${pi+1} of ${sub.pages.length}`:""}`,M,20);
+          if(pi===0&&g.lvl){ const col={1:[192,72,42],2:[176,138,6],3:[46,138,85],4:[45,99,180]}[g.lvl];
+            doc.setFillColor(...col); doc.roundedRect(W-M-62,8,62,18,4,4,"F"); doc.setTextColor(255,255,255); doc.setFontSize(10); doc.text(`Grade ${g.lvl}`,W-M-31,20.5,{align:"center"}); }
+          const img=doc.getImageProperties(url); const maxW=W-2*M, maxH=H-32-M; const k=Math.min(maxW/img.width,maxH/img.height);
+          doc.addImage(url,"JPEG",M+(maxW-img.width*k)/2,32,img.width*k,img.height*k,undefined,"FAST");
+        }catch(e){}
+      }
+    }
+    if(first){ toast("Couldn't load the scanned pages."); return; }
+    await outPdf(doc,`${fname.replace(/[^\w ,.-]+/g,"").slice(0,90)}.pdf`);
+    toast(unmarked?`PDF saved. ${unmarked} paper${unmarked>1?"s have":" has"} no marks yet; open it and tap Mark up this paper.`:"PDF saved.");
+  }catch(e){ if(e&&e.code==="declined") return; toast("Couldn't build the PDF. Try again."); }
+}
 async function studentPdf(subs,fname,opts){
   opts=opts||{};
   
   subs=subs.filter(s=>s&&S.assignments[s.assignmentId]&&(S.students[s.studentId]||s.unnamed));
   if(!opts.keepOrder) subs.sort((x,y)=>subName(x).localeCompare(subName(y)));
   if(!subs.length){toast("No graded papers to print yet.");return}
+  if(opts.pages||opts.marked){
+    const todo=subs.filter(x=>x.ai&&(x.ai.items||[]).length&&(x.pages||[]).length&&!((x.ai.marks||[]).length));
+    if(todo.length&&CAP.sample&&CAP.imgOK){
+      const wasPrinting=PRINTING; PRINTING=false;
+      for(let i=0;i<todo.length;i++){ toast(`Marking papers before printing… ${i+1} of ${todo.length}`,3000); await markPaper(todo[i].id); }
+      PRINTING=wasPrinting; subs=subs.map(x=>S.submissions[x.id]||x);
+    }
+  }
+  if(opts.marked) return markedPdf(subs,fname);
   try{
     toast("Building PDF…");
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
