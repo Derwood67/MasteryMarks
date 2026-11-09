@@ -149,6 +149,13 @@ pre.tx{white-space:pre-wrap;font:400 .88rem/1.5 var(--f-body);background:var(--s
 .vb .n{font-weight:700;font-size:.78rem;font-variant-numeric:tabular-nums}
 .chip-re{display:inline-flex;gap:4px;align-items:center;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--s1);color:var(--on-score)}
 .chip-ok{display:inline-flex;gap:4px;align-items:center;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.mpage{position:relative;line-height:0}
+.mk{position:absolute;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:6px;cursor:grab;touch-action:none;line-height:1.1;z-index:1}
+.mk-sym{font:900 clamp(18px,4.2vw,30px)/1 system-ui,sans-serif;text-shadow:0 0 3px #fff,0 0 3px #fff}
+.mk.ok .mk-sym{color:#1E8A4C}
+.mk.no .mk-sym{color:#D0342C}
+.mk-note{position:absolute;transform:translate(4px,-50%);cursor:grab;touch-action:none;z-index:1}
+.mk-tip{font:700 clamp(11px,2.6vw,15px)/1.2 "Comic Sans MS","Chalkboard SE","Segoe Print",system-ui,sans-serif;color:#C02A22;background:rgba(255,255,255,.9);border:1.5px solid #D0342C;border-radius:6px;padding:2px 6px;white-space:nowrap;max-width:45vw;overflow:hidden;text-overflow:ellipsis}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;font-size:.9rem;z-index:30;max-width:calc(100% - 40px)}
 .drop{border:2px dashed var(--line);border-radius:12px;padding:14px;text-align:center;color:var(--muted);font-size:.9rem}
 .drop.on{border-color:var(--accent);background:var(--accent-soft)}
@@ -841,6 +848,7 @@ function gradeResults(a){
           sub.status==="review"?h("button",{class:"btn",onclick:()=>{acceptSub(sub);toast(`Saved ${st.name}'s grade.`)}},"Accept"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`,{pages:true}),"Print with work"):null,
           (sub.ai||sub.status==="accepted")?printBtn(()=>studentPdf([S.submissions[key]],`${st.name} - ${a.title}`),"Print without work"):null,
+          sub.pages&&sub.pages.length?h("button",{class:"btn ghost",onclick:()=>{S.viewSub=key;draw()}},"See marked paper"):null,
           h("button",{class:"btn ghost",onclick:()=>{S.tab="assign";S.openA=a.id;draw();scrollTo(0,0)}},"Change scores"),
           gradePill(a,st,sub)));
     })):null);
@@ -1282,7 +1290,7 @@ async function gradeIt(key,blobs,text){
       :`Standards to score:\n${myCodes.map(c=>`- ${c}: ${STDTEXT[c]}`).join("\n")}\nQuestions tagged with a standard on the answer sheet are the main evidence for it, but EVERY standard listed here must get a whole-number score from 1 to 4, using evidence from anywhere in the student's work. For example, capitalization, punctuation and spelling in any written answer count toward conventions standards, and word choice counts toward language and vocabulary standards. Never leave a standard unscored just because no question is tagged to it.`,
     `Scale (score each standard separately, whole numbers only):\n4 = ${LEVEL_DESC[4]}\n3 = ${LEVEL_DESC[3]}\n2 = ${LEVEL_DESC[2]}\n1 = ${LEVEL_DESC[1]}`,
     `Judge the whole assignment across all pages. Compare each answer with the answer sheet. Give every listed standard a score of 1, 2, 3 or 4.`].join("\n\n");
-  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name (only if a name is written on the paper; otherwise use no name): one strength, one next step. Never mention AI, Claude, or automated grading.", "items": [{"n": "question number", "right": true, "student": "what the student answered, short", "answer": "the correct answer (only when wrong)", "note": "if right: a short, specific bit of praise naming what they did well; if wrong: kindly explain the mistake and how to fix it, in words a 9–11 year old understands"}]}
+  const shape=(auto?`{"codes": ["the codes you chose"], `:`{`)+`"scores": {"<code>": 1-4}, "reasons": {"<code>": "one sentence citing specific evidence, e.g. which questions were right or wrong"}, "correct": "e.g. 7 of 10 (or empty if not countable)", "feedback": "two short, kind sentences written as ${teacherName()} speaking to the student by first name (only if a name is written on the paper; otherwise use no name): one strength, one next step. Never mention AI, Claude, or automated grading.", "items": [{"n": "question number", "right": true, "student": "what the student answered, short", "answer": "the correct answer (only when wrong)", "note": "if right: a short, specific bit of praise naming what they did well; if wrong: kindly explain the mistake and how to fix it, in words a 9–11 year old understands", "tip": "only when wrong: a very short correction to write on the paper, 6 words or fewer, e.g. 'nor, not or' or '3/4 is bigger'", "page": 1, "x": 0.08, "y": 0.2, "ax": 0.55, "ay": 0.24}]}\nFor "page", "x", "y", "ax" and "ay" (only when page images are attached): the image number the question is on; x,y = the point in the left margin right beside that question's number; ax,ay = the point just to the right of the end of the student's answer to that question. All as fractions of the image width and height (0 = left or top, 1 = right or bottom).
 Include one entry in "items" for every question, in order. Feedback notes speak to the student as ${teacherName()} would and never mention AI.`;
   try{
     let r, transcript="", legibility="";
@@ -1326,11 +1334,16 @@ Include one entry in "items" for every question, in order. Feedback notes speak 
     }
     const scores={}, reasons={};
     for(const c of codes){ const v=Number(r&&r.scores?r.scores[c]:NaN); if(v>=1&&v<=4) scores[c]=Math.round(v); const w=r&&r.reasons?r.reasons[c]:""; if(w) reasons[c]=String(w).slice(0,400); }
-    const items=(Array.isArray(r&&r.items)?r.items:[]).slice(0,60).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),right:!!(x&&x.right),student:String(x&&x.student||"").slice(0,300),answer:String(x&&x.answer||"").slice(0,300),note:String(x&&x.note||"").slice(0,400)}));
+    const items=(Array.isArray(r&&r.items)?r.items:[]).slice(0,60).map((x,i)=>({n:String(x&&x.n||i+1).slice(0,8),right:!!(x&&x.right),student:String(x&&x.student||"").slice(0,300),answer:String(x&&x.answer||"").slice(0,300),note:String(x&&x.note||"").slice(0,400),tip:String(x&&x.tip||"").slice(0,60),
+      page:Number(x&&x.page),x:Number(x&&x.x),y:Number(x&&x.y),ax:Number(x&&x.ax),ay:Number(x&&x.ay)}));
+    const singlePass=blobs.length>0&&blobs.length<=CAP.imgMax;
+    const marks=singlePass?items.filter(x=>x.page>=1&&x.page<=blobs.length&&x.x>=0&&x.x<=1&&x.y>=0&&x.y<=1).map(x=>({n:x.n,page:x.page-1,x:x.x,y:x.y,...(x.ax>=0&&x.ax<=1&&x.ay>=0&&x.ay<=1?{ax:x.ax,ay:x.ay}:{}),right:x.right,tip:x.right?"":x.tip})):[];
+    items.forEach(x=>{delete x.page;delete x.x;delete x.y;delete x.ax;delete x.ay;});
     const corr=String(r&&r.correct||"")||(items.length?`${items.filter(x=>x.right).length} of ${items.length}`:"");
-    const ai={scores,reasons,items,transcript:transcript.slice(0,12000),feedback:String(r&&r.feedback||"").slice(0,600),correct:corr.slice(0,40),legibility,pagesRead:blobs.length,gradedAt:Date.now()};
+    const ai={scores,reasons,items,marks,transcript:transcript.slice(0,12000),feedback:String(r&&r.feedback||"").slice(0,600),correct:corr.slice(0,40),legibility,pagesRead:blobs.length,gradedAt:Date.now()};
     put("submissions",key,{...S.submissions[key],ai,scores:{...scores},status:"review",error:""});
     if(codes.some(c=>!scores[c])) await scoreMissing(key);
+    if(items.length&&blobs.length&&marks.length<items.length*0.5) await markPaper(key,blobs);
   }catch(e){
     if(e&&(e.code==="not_granted"||e.code==="sampling_disabled")) CAP.sample=null;
     put("submissions",key,{...S.submissions[key],status:"error",error:errMsg(e,"Grading didn't finish. Tap Grade to try again.")});
@@ -1369,6 +1382,80 @@ function missingNotice(a){
   if(!list.length) return null;
   return h("div",{class:"notice row spread"},h("span",null,`${list.length} paper${list.length>1?"s are":" is"} missing a score on one or more chosen standards.`),
     h("button",{class:"btn",onclick:()=>{if(canClaude(false)) scoreMissingAll(a.id)}},"Score missing standards"));
+}
+/* ---------------- marking up the paper ---------------- */
+/* Finds where each graded question sits on the scanned pages so a ✓ or ✗ can be drawn beside it. */
+async function markPaper(key,blobs){
+  const sub=S.submissions[key]; if(!sub||!sub.ai||!(sub.ai.items||[]).length||!(sub.pages||[]).length) return;
+  setBusy(key,"Marking up the paper…");
+  try{
+    if(!blobs){ blobs=[]; for(const p of sub.pages){ const r=await fetch(pageSrc(p)); if(r.ok) blobs.push(await r.blob()); } }
+    const its=sub.ai.items; const marks=[];
+    for(let i=0;i<blobs.length;i+=CAP.imgMax){
+      const chunk=blobs.slice(i,i+CAP.imgMax);
+      const r=await sampleJson([`These ${chunk.length} images are pages ${i+1}–${i+chunk.length} of one student's completed assignment.`,
+        `For each question listed below that appears on these pages, give two points: x,y = the point in the left margin right beside the question's number, where a teacher would put a check mark; ax,ay = the point just to the right of the end of the student's answer. Use fractions of the image width and height (0 = left or top, 1 = right or bottom). "page" counts within these ${chunk.length} images, starting at 1. Leave out questions that are not on these pages.`,
+        `Questions: ${its.map(x=>x.n).join(", ")}`,
+        `Reply with only this JSON object: {"marks": [{"n": "1", "page": 1, "x": 0.07, "y": 0.18, "ax": 0.5, "ay": 0.22}]}`].join("\n\n"),{images:chunk,modelTier:"default"});
+      for(const m of (Array.isArray(r&&r.marks)?r.marks:[])){ const it=its.find(x=>String(x.n)===String(m&&m.n)); const pg=Number(m.page), x=Number(m.x), y=Number(m.y);
+        if(it&&pg>=1&&pg<=chunk.length&&x>=0&&x<=1&&y>=0&&y<=1&&!marks.some(q=>q.n===it.n)) { const ax=Number(m.ax), ay=Number(m.ay); marks.push({n:it.n,page:i+pg-1,x,y,...(ax>=0&&ax<=1&&ay>=0&&ay<=1?{ax,ay}:{}),right:it.right,tip:it.right?"":(it.tip||shortTip(it))}); } }
+    }
+    const cur=S.submissions[key]; put("submissions",key,{...cur,ai:{...cur.ai,marks}});
+  }catch(e){ toast(errMsg(e,"Couldn't mark up the paper. Try again.")); }
+  finally{ setBusy(key,null); }
+}
+const shortTip=it=>it.answer?`Answer: ${it.answer}`.slice(0,40):"Check this one";
+/* Draws a page with its marks: green ✓ for right, red ✗ and a short note for wrong. */
+async function renderMarked(blob,marks,maxSide){
+  const bmp=await createImageBitmap(blob); const k=Math.min(1,(maxSide||1600)/Math.max(bmp.width,bmp.height));
+  const W=Math.round(bmp.width*k), H=Math.round(bmp.height*k);
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H; const c=cv.getContext("2d");
+  c.fillStyle="#fff"; c.fillRect(0,0,W,H); c.drawImage(bmp,0,0,W,H);
+  const u=Math.max(14,W/34); c.lineCap="round"; c.lineJoin="round";
+  for(const m of marks){
+    const x=Math.min(W-u,Math.max(u,m.x*W)), y=Math.min(H-u,Math.max(u,m.y*H));
+    c.lineWidth=u*0.22;
+    if(m.right){ c.strokeStyle="#1E8A4C"; c.beginPath(); c.moveTo(x-u*0.55,y); c.lineTo(x-u*0.12,y+u*0.45); c.lineTo(x+u*0.65,y-u*0.55); c.stroke(); }
+    else{
+      c.strokeStyle="#D0342C"; c.beginPath(); c.moveTo(x-u*0.45,y-u*0.45); c.lineTo(x+u*0.45,y+u*0.45); c.moveTo(x+u*0.45,y-u*0.45); c.lineTo(x-u*0.45,y+u*0.45); c.stroke();
+      if(m.tip){
+        const fs=Math.round(u*0.72); c.font=`700 ${fs}px "Comic Sans MS","Chalkboard SE","Segoe Print",system-ui,sans-serif`;
+        const tw=Math.min(c.measureText(m.tip).width,W*0.45);
+        const has=m.ax!=null; let tx=has?m.ax*W+u*0.35:W*0.62; if(tx+tw+fs>W) tx=Math.max(4,W-tw-fs*1.2);
+        const ty=Math.min(H-fs*1.6,Math.max(2,(has?m.ay*H:y)-fs*0.75));
+        c.fillStyle="rgba(255,255,255,0.88)"; c.strokeStyle="#D0342C"; c.lineWidth=Math.max(1.5,u*0.06);
+        c.beginPath(); if(c.roundRect) c.roundRect(tx,ty,tw+fs*0.6,fs*1.5,fs*0.35); else c.rect(tx,ty,tw+fs*0.6,fs*1.5); c.fill(); c.stroke();
+        c.fillStyle="#C02A22"; c.textBaseline="middle"; c.fillText(m.tip,tx+fs*0.3,ty+fs*0.76,W*0.45);
+      }
+    }
+  }
+  return cv;
+}
+/* One page on screen with its marks; marks can be dragged to the right spot. */
+function markedPage(sub,i,alt){
+  const marks=((sub.ai&&sub.ai.marks)||[]).filter(m=>m.page===i);
+  const wrap=h("div",{class:"mpage"},h("img",{class:"page",src:pageSrc(sub.pages[i]),alt,loading:"lazy"}));
+  if(S.hideMarks) return wrap;
+  const drag=(el,m,keys)=>{
+    el.addEventListener("pointerdown",e=>{
+      e.preventDefault(); el.setPointerCapture(e.pointerId); const box=wrap.getBoundingClientRect();
+      const move=ev=>{ const nx=Math.min(1,Math.max(0,(ev.clientX-box.left)/box.width)), ny=Math.min(1,Math.max(0,(ev.clientY-box.top)/box.height)); el.style.left=nx*100+"%"; el.style.top=ny*100+"%"; el._p=[nx,ny]; };
+      const up=()=>{ el.removeEventListener("pointermove",move); el.removeEventListener("pointerup",up); el.removeEventListener("pointercancel",up);
+        if(el._p){ const cur=S.submissions[sub.id]; const ms=(cur.ai.marks||[]).map(q=>(q.n===m.n&&q.page===m.page)?{...q,[keys[0]]:el._p[0],[keys[1]]:el._p[1]}:q); put("submissions",sub.id,{...cur,ai:{...cur.ai,marks:ms}}); } };
+      el.addEventListener("pointermove",move); el.addEventListener("pointerup",up); el.addEventListener("pointercancel",up);
+    });
+  };
+  marks.forEach(m=>{
+    const el=h("span",{class:"mk "+(m.right?"ok":"no"),style:`left:${m.x*100}%;top:${m.y*100}%`,title:`Question ${m.n}: ${m.right?"correct":"needs fixing"}. Drag to move.`,role:"img","aria-label":`Question ${m.n} ${m.right?"correct":"wrong"}`},
+      h("span",{class:"mk-sym"},m.right?"✓":"✗"));
+    drag(el,m,["x","y"]); wrap.append(el);
+    if(!m.right&&m.tip){
+      const tx=m.ax!=null?m.ax:0.62, ty=m.ay!=null?m.ay:m.y;
+      const tip=h("span",{class:"mk-tip mk-note",style:`left:${tx*100}%;top:${ty*100}%`,title:`Note for question ${m.n}. Drag to move.`},m.tip);
+      drag(tip,m,["ax","ay"]); wrap.append(tip);
+    }
+  });
+  return wrap;
 }
 function deleteSub(sub){ oldAssets(sub); remove("submissions",sub.id); }
 
@@ -1877,7 +1964,10 @@ function drawViewer(){
       h("div",{class:"row"},printBtn(()=>studentPdf([s],`${st.name} - ${a.title}`),"Print"),h("button",{class:"btn",onclick:()=>studentPdf([s],`${st.name} - ${a.title}`)},"Student PDF")),
       s.ai&&s.ai.transcript?h("details",null,h("summary",null,"Transcribed work"),h("pre",{class:"tx"},s.ai.transcript)):null,
       s.text?h("details",null,h("summary",null,"Typed submission"),h("pre",{class:"tx"},s.text)):null,
-      (s.pages||[]).map((p,i)=>h("img",{class:"page",src:pageSrc(p),alt:`Page ${i+1}`,loading:"lazy"})),
+      (s.pages||[]).length&&s.ai&&(s.ai.items||[]).length?h("div",{class:"row"},
+        (s.ai.marks||[]).length?h("label",{class:"row small"},h("input",{type:"checkbox",id:"showMarks",checked:!S.hideMarks,onchange:e=>{S.hideMarks=!e.target.checked;draw()}}),"Show ✓ and ✗ marks (drag a mark to move it)"):null,
+        S.busy[s.id]?h("span",{class:"pill"},h("span",{class:"spin"}),S.busy[s.id]):h("button",{class:"btn",onclick:()=>{if(canClaude(true)) markPaper(s.id)}},(s.ai.marks||[]).length?"Redo marks":"Mark up this paper")):null,
+      (s.pages||[]).map((p,i)=>markedPage(s,i,`Page ${i+1}`)),
       h("div",{class:"row"},h("button",{class:"btn",onclick:()=>{S.viewSub=null;S.tab="assign";S.openA=a.id;draw()}},"Open assignment"),
         confirmBtn("delS"+s.id,"Delete this submission",()=>{deleteSub(s);S.viewSub=null}))));
   document.body.append(ov);
@@ -2001,7 +2091,8 @@ async function studentPdf(subs,fname,opts){
         for(let pi=0;pi<sub.pages.length;pi++){
           try{
             const r=await fetch(pageSrc(sub.pages[pi])); if(!r.ok) continue;
-            const url=await shrinkForPrint(await r.blob());
+            const raw=await r.blob(); const pm=((sub.ai&&sub.ai.marks)||[]).filter(m=>m.page===pi);
+            const url=pm.length?(await renderMarked(raw,pm,1300)).toDataURL("image/jpeg",0.82):await shrinkForPrint(raw);
             doc.addPage(); doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(23,32,28);
             doc.text(`${st.name}  ·  ${a.title}  ·  student work, page ${pi+1} of ${sub.pages.length}`,M,34);
             const img=doc.getImageProperties(url); const maxW=TW, maxH=H-46-44; const k=Math.min(maxW/img.width,maxH/img.height);
